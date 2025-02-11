@@ -2,14 +2,17 @@
   "name": "discordmate",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "src/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon server"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "discord.js": "^14.18.0",
+    "dotenv": "^16.4.7",
     "express": "^4.21.2"
   }
 }
