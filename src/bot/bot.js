@@ -14,12 +14,13 @@ const __dirname = dirname(__filename);  // 파일 경로에서 디렉토리 추�
 //client
 const client = new Client({
   intents: [
+    GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessageTyping,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.DirectMessageTyping,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
   ],
   partials: [Partials.Channel, Partials.GuildMember, Partials.User, Partials.Message],
   allowedMentions: { parse: ['roles'], repliedUser: false }

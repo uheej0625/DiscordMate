@@ -1,13 +1,15 @@
 import { Events } from 'discord.js';
 import generateMessage from  '../../llm/chat/directMessage.js'
+import { chat, type } from '../interactions/directMessage.js'
+
+let messageBuffer = []; // 메시지를 저장할 배열
+let typingTimeout = null; // 타이핑 중지 타이머
+
 export default {
   name: Events.MessageCreate,
   once: false,
   async execute(message) {
-    if (message.author.bot || !message.content) return; //Ignore bot messages
-    const client = message.client;
-    const output = await generateMessage(message.content);
-    console.log(output);
-    client.channels.cache.get(message.channelId).send(output);
+    if (message.author.bot) return;
+    if (!message.guild) return chat(message);
   },
 };
