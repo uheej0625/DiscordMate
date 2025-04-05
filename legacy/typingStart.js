@@ -1,5 +1,5 @@
 import { Events } from 'discord.js';
-import { chat, type } from '../../../legacy/interactions/directMessage.js'
+import { chat, type } from './interactions/directMessage.js'
 
 let typingUsers = [];
 
