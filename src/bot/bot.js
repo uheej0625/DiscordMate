@@ -17,7 +17,6 @@ const client = new Client({
   partials: discordConfig.partials
 });
 
-console.log(discordConfig.token);
 client.login(discordConfig.token);
 
 // Slash command handling
