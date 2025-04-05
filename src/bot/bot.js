@@ -1,32 +1,24 @@
-import dotenv from 'dotenv';
-import { Client, Collection, GatewayIntentBits, Partials, ActivityType, ChannelType, EmbedBuilder, REST, Routes } from 'discord.js';
 import path from 'node:path';
 import fs from 'node:fs';
-
 import { pathToFileURL } from 'url';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-dotenv.config();
+
+import { Client, Collection, ActivityType, ChannelType, EmbedBuilder, REST, Routes } from 'discord.js';
+
+import { discordConfig } from '../config/discord.js';
 
 const __filename = fileURLToPath(import.meta.url);  // 현재 파일의 경로
 const __dirname = dirname(__filename);  // 파일 경로에서 디렉토리 추출
 
 //client
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.GuildMessageTyping,
-    GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.DirectMessageTyping,
-    GatewayIntentBits.MessageContent,
-  ],
-  partials: [Partials.Channel, Partials.GuildMember, Partials.User, Partials.Message],
-  allowedMentions: { parse: ['roles'], repliedUser: false }
+  intents: discordConfig.intents,
+  partials: discordConfig.partials
 });
 
-client.login(process.env.BOT_TOKEN);
+console.log(discordConfig.token);
+client.login(discordConfig.token);
 
 // Slash command handling
 client.commands = new Collection();
@@ -42,9 +34,9 @@ for (const file of commandFiles) {
   commands.push(command.data);
 }
 
-const rest = new REST({ version: "10" }).setToken(process.env.BOT_TOKEN);
+const rest = new REST({ version: "10" }).setToken(discordConfig.token);
 rest
-  .put(Routes.applicationCommands(process.env.BOT_ID), { body: commands })
+  .put(Routes.applicationCommands(discordConfig.clientId), { body: commands })
   .then((command) => console.log(`${command.length}개의 커맨드를 푸쉬했습니다`))
 
 // Event handling

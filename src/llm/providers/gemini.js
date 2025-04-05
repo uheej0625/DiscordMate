@@ -1,10 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: "AIzaSyBZ--Ljs91MPS47dhoY03UXKc0_dwlmODw" });
+import { geminiConfig } from '../../config/gemini.js';
+const ai = new GoogleGenAI({ apiKey: geminiConfig.apiKey });
 
 async function main() {
   const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+    model: geminiConfig.model,
     contents: "How does AI work?",
   });
   console.log(response.text);

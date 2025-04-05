@@ -1,5 +1,4 @@
-import { Client, Collection, GatewayIntentBits, Partials, ActivityType, ChannelType, EmbedBuilder, REST, Routes } from 'discord.js';
-
+import { GatewayIntentBits, Partials, ActivityType, ChannelType } from 'discord.js';
 export const discordConfig = {
   token: process.env.DISCORD_BOT_TOKEN,
   clientId: process.env.DISCORD_CLIENT_ID,
