@@ -1,4 +1,4 @@
-import { getGeminiResponse } from '../llm/llm.js';
+import { getGeminiResponse } from '../ai/index.js';
 import { geminiConfig } from '../config/gemini.js';
 
 export default async function handleMessage(message) {

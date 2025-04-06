@@ -1,6 +1,6 @@
 import { Events } from 'discord.js';
 
-import handleMessage from '../../handler/messageHandler.js'
+import handleMessage from '../../core/messageHandler.js'
 
 export default {
   name: Events.MessageCreate,
