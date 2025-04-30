@@ -1,8 +1,14 @@
-import { getGeminiResponse } from '../ai/ai.js';
-import { geminiConfig } from '../config/gemini.js';
+import { getMessageResponse } from '../ai/ai.js';
 
 export default async function handleMessage(message) {
-  const reply = await getGeminiResponse({ type: 'text', prompt: message.content });
+  const payload = {
+    userInput: message.content,
+    userId: message.author.id,
+    timestamp: message.createdTimestamp,
+  };
+
+  const reply = await getMessageResponse(payload);
+
   console.log(reply);
   await message.channel.send(reply);
 }

@@ -2,13 +2,13 @@ import { SlashCommandBuilder, EmbedBuilder, Colors, ButtonBuilder, ButtonStyle, 
 
 export default {
   data: new SlashCommandBuilder()
-    .setName('setting')
+    .setName('Setting')
     .setNameLocalizations({ 
       'ko': '설정' 
     })
     .setDescription('DiscordMate settings')
     .addSubcommand(subcommand => subcommand
-      .setName('llm ')
+      .setName('llm')
       .setDescription('llm settings')
       .addStringOption(option => option
         .setName('llm provider')
