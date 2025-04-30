@@ -1,5 +1,4 @@
 import { SlashCommandBuilder, EmbedBuilder, Colors, ButtonBuilder, ButtonStyle, ActionRowBuilder, ComponentType } from 'discord.js';
-import { fs } from 'fs';
 
 export default {
   data: new SlashCommandBuilder()
