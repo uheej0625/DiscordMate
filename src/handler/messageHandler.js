@@ -1,4 +1,4 @@
-import { getMessageResponse } from '../ai';
+import { getMessageResponse } from '../ai/index.js';
 
 export default async function handleMessage(message) {
   const payload = {
