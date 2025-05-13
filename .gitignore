@@ -1,16 +1,15 @@
-# 디폴트 무시된 파일
-/shelf/
-/.idea/workspace.xml
-# 에디터 기반 HTTP 클라이언트 요청
-/httpRequests/
-# Datasource local storage ignored files
-/dataSources/
-/dataSources.local.xml
-# Ignore environment files
+# Environment files
 .env
-# Ignore dependencies
+
+# Dependencies
 node_modules/
-# Ignore package lock files
+
+# Package lock files
 package-lock.json
-# Ignore .idea/
+
+# IDE settings
 .idea/
+.vscode/
+
+# Database files
+src/db/file.db
