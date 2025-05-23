@@ -31,35 +31,3 @@ export default function handleMessage(message) {
   }
   buffer.timer = setTimeout(() => flushUserBuffer(userId, buffer, message), TIMEOUT_MS);
 }
-
-// test
-handleMessage({
-  author: { id: 'user1' },
-  channel: {
-    send: (msg) => {
-      console.log('Message sent:', msg);
-    },
-  },
-  content: 'Hello, this is a test message!',
-  createdTimestamp: Date.now(),
-})
-handleMessage({
-  author: { id: 'user1' },
-  channel: {
-    send: (msg) => {
-      console.log('Message sent:', msg);
-    },
-  },
-  content: 'This is another message.',
-  createdTimestamp: Date.now(),
-})
-handleMessage({
-  author: { id: 'user1' },
-  channel: {
-    send: (msg) => {
-      console.log('Message sent:', msg);
-    },
-  },
-  content: 'And yet another message.',
-  createdTimestamp: Date.now(),
-})
