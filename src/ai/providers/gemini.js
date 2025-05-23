@@ -5,6 +5,6 @@ const ai = new GoogleGenAI({ apiKey: geminiConfig.apiKey });
 export async function callGeminiAPI(prompt) {
   return await ai.models.generateContent({
     model: geminiConfig.model,
-    contents: prompt,
+    contents: prompt.userInput,
   });
 }
