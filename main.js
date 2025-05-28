@@ -1,4 +1,4 @@
 import 'dotenv/config';
 
 // client
-import client from './src/bot/index.js';
+import client from './src/discord/index.js';
