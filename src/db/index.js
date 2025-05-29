@@ -6,31 +6,11 @@ const db = new Database("./src/db/file.db");
 db.prepare(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    status TEXT CHECK(status IN ('admin', 'whitelist', 'blacklist')),
+    discord_id TEXT UNIQUE NOT NULL,
+    status TEXT CHECK(status IN ('admin', 'whitelist', 'blacklist')) NOT NULL,
     username TEXT NOT NULL,
-    globalName TEXT,
+    global_name TEXT,
     preferred_name TEXT,
-    avatar TEXT,
-    banner TEXT,
-    name TEXT,
-    age INTEGER,
-    gender TEXT,
-    race TEXT,
-    origin TEXT,
-    birthday TEXT,
-    strength TEXT,
-    intelligence TEXT,
-    family TEXT,
-    past TEXT,
-    education TEXT,
-    job TEXT,
-    income TEXT,
-    residence TEXT,
-    network TEXT,
-    reputation TEXT,
-    like TEXT,
-    hate TEXT,
-    special TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )
@@ -47,56 +27,14 @@ db.prepare(`
   `
 ).run();
 
-// 대화 데이터를 저장할 테이블 생성
+// 메세지를 저장할 테이블 생성
 db.prepare(`
-  CREATE TABLE IF NOT EXISTS conversations (
+  CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
+    discord_id TEXT UNIQUE,
     user_id TEXT NOT NULL,
-    message TEXT NOT NULL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    content TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
   )
 `).run();
-
-// 대화 저장 함수
-db.saveConversation = (id, userId, message) => {
-  const stmt = db.prepare(`
-    INSERT INTO conversations (id, user_id, message) VALUES (?, ?, ?)
-  `);
-  stmt.run(id, userId, message);
-};
-
-// 대화 불러오기 함수
-db.getConversationsByUser = (userId) => {
-  const stmt = db.prepare(`
-    SELECT * FROM conversations WHERE user_id = ? ORDER BY timestamp ASC
-  `);
-  return stmt.all(userId);
-};
-
-db.getConversationById = (id) => {
-  const stmt = db.prepare(`
-    SELECT * FROM conversations WHERE id = ?
-  `);
-  return stmt.get(id);
-};
-
-// 테스트 데이터 삽입 및 조회
-const testConversation = () => {
-  const testId = "conv1";
-  const testUserId = "user1";
-  const testMessage = "Hello, this is a test message!";
-
-  // 대화 저장
-  db.saveConversation(testId, testUserId, testMessage);
-  console.log("대화 저장 완료");
-
-  // 사용자별 대화 조회
-  const userConversations = db.getConversationsByUser(testUserId);
-  console.log("사용자 대화:", userConversations);
-
-  // ID로 대화 조회
-  const conversation = db.getConversationById(testId);
-  console.log("특정 대화:", conversation);
-};
-
-testConversation();
