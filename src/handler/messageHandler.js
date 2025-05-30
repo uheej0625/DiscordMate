@@ -1,5 +1,5 @@
 import { getMessageResponse } from '../ai/index.js';
-import { saveMessage } from '../db/message.js';
+import { saveMessage } from '../database/message.js';
 
 const userBuffers = new Map();
 const TIMEOUT_MS = 3000; // 2초 동안 추가 메시지 없으면 flush

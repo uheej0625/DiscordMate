@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 
-const db = new Database("./src/db/file.db");
+const db = new Database("./src/database/file.db");
 
 // 테이블 생성 (이미 있으면 생성하지 않음)
 db.prepare(`
