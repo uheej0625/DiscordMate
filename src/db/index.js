@@ -38,3 +38,5 @@ db.prepare(`
     FOREIGN KEY (user_id) REFERENCES users(id)
   )
 `).run();
+
+export default db;
