@@ -36,7 +36,8 @@ for (const file of commandFiles) {
 const rest = new REST({ version: "10" }).setToken(discordConfig.token);
 rest
   .put(Routes.applicationCommands(discordConfig.clientId), { body: commands })
-  .then((command) => console.log(`${command.length}개의 커맨드를 푸쉬했습니다`))
+  .then((command) => console.log(`Successfully registered ${command.length} application commands.`))
+  .catch(console.error);
 
 // Event handling
 const eventsPath = path.join(__dirname, 'events');

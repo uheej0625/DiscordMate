@@ -4,6 +4,6 @@ export default {
   name: Events.ClientReady,
   once: true,
   async execute(client) {
-    console.log(`${client.user.tag} 로그인`);
+    console.log(`${client.user.username} is ready!`);
   },
 };
