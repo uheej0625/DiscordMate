@@ -12,4 +12,4 @@ package-lock.json
 .vscode/
 
 # Database files
-src/db/file.db
+src/database/file.db
