@@ -6,8 +6,8 @@ const db = new Database("./src/database/file.db");
 db.prepare(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    discord_id TEXT UNIQUE NOT NULL,
-    status TEXT CHECK(status IN ('admin', 'whitelist', 'blacklist')) NOT NULL,
+    role TEXT CHECK(role IN ('host', 'user')) NOT NULL,
+    access TEXT CHECK(access IN ('default', 'whitelist', 'blacklist')) DEFAULT 'default',
     username TEXT NOT NULL,
     global_name TEXT,
     preferred_name TEXT,

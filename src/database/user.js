@@ -6,13 +6,11 @@ export function getUserById(userId) {
 
 export function createUser({ userId, username, globalName }) {
   db.prepare(`
-    INSERT INTO users (id, discord_id, username, global_name, preferred_name, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, 'whitelist', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    INSERT INTO users (id, role, access, username, global_name, preferred_name, created_at, updated_at)
+    VALUES (?, 'user', 'default', ?, ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `).run(
     userId,
-    userId,
     username,
-    globalName,
-    null
+    globalName
   );
 }
