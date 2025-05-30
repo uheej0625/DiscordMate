@@ -1,6 +1,5 @@
 import db from './index.js';
 import { randomUUID } from 'crypto';
-import client from '../discord/index.js';
 
 /**
  * 메시지 저장
@@ -12,28 +11,6 @@ import client from '../discord/index.js';
  */
 
 export function saveMessage({ discordId, userId, content, timestamp}) {
-  // user가 없으면 생성 (discord.js client에서 정보 조회)
-  const userExists = db.prepare('SELECT 1 FROM users WHERE id = ?').get(userId);
-  if (!userExists) {
-    let username = null, globalName = null, preferredName = null;
-    const user = client.users?.cache?.get(userId);
-    if (user) {
-      username = user.username || null;
-      globalName = user.globalName || null;
-      preferredName = user.preferredName || null;
-    }
-    db.prepare(`
-      INSERT INTO users (id, discord_id, username, global_name, preferred_name, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 'whitelist', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `).run(
-      userId,
-      userId,
-      username,
-      globalName,
-      preferredName
-    );
-  }
-
   if (!timestamp) {
     timestamp = new Date().toISOString();
   } else if (typeof timestamp === 'number') {
