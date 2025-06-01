@@ -1,6 +1,6 @@
 import { getMessageResponse } from '../ai/index.js';
 import { saveMessage } from '../database/message.js';
-import { getUserById, createUser } from '../database/user.js';
+import { getUserById, saveUser } from '../database/user.js';
 
 const userBuffers = new Map();
 const TIMEOUT_MS = 3000; // 2초 동안 추가 메시지 없으면 flush
@@ -12,14 +12,15 @@ export default function handleMessage(message) {
   let user = getUserById(userId);
   if (!user) {
     const { username = null, globalName = null } = message.author;
-    createUser({ userId, username, globalName });
+    saveUser({ userId, username, globalName });
   }
-
   saveMessage({
     discordId: message.id,
     userId,
+    channelId: message.channel.id,
+    guildId: message.guild ? message.guild.id : null,
     content: message.content,
-    timestamp: message.createdTimestamp,
+    createdAt: message.createdTimestamp,
   });
   
   if (!userBuffers.has(userId)) {

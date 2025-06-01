@@ -1,34 +1,33 @@
 import db from './index.js';
 import { randomUUID } from 'crypto';
+import { convertToISO } from '../utils/convertToISO.js';
 
 /**
- * 메시지 저장
+ * Save a message to the database.
  * @param {object} param0
- * @param {string} param0.discordId - 디스코드 메시지 id
- * @param {string} param0.userId - 디스코드 유저 id
- * @param {string} param0.content - 메시지 내용
- * @param {number|string|Date} [param0.timestamp] - createdTimestamp(ms) 또는 Date/ISO 문자열(선택)
+ * @param {string} param0.discordId - Discord message ID
+ * @param {string} param0.userId - Discord user ID
+ * @param {string} param0.channelId - Discord channel ID
+ * @param {string} param0.guildId - Discord guild ID
+ * @param {string} param0.content - Message content
+ * @param {number|string|Date} [param0.createdAt] - createdTimestamp(ms) or Date/ISO string (optional)
  */
 
-export function saveMessage({ discordId, userId, content, timestamp}) {
-  if (!timestamp) {
-    timestamp = new Date().toISOString();
-  } else if (typeof timestamp === 'number') {
-    timestamp = new Date(timestamp).toISOString();
-  } else if (timestamp instanceof Date) {
-    timestamp = timestamp.toISOString();
-  }
+export function saveMessage({ discordId, userId, channelId, guildId, content, createdAt }) {
+  const isoTimestamp = convertToISO(createdAt);
   
   try {
     db.prepare(`
-      INSERT INTO messages (id, discord_id, user_id, content, timestamp)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO messages (id, discord_id, user_id, channel_id, guild_id, content, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       randomUUID(),
       discordId,
       userId,
+      channelId,
+      guildId,
       content,
-      timestamp
+      isoTimestamp
     );
   } catch (e) {
     console.error('DB 저장 오류:', e);
