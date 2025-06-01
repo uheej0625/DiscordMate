@@ -4,6 +4,7 @@ import convertToISO from '../utils/convertToISO.js';
 /**
  * Get a user from the database by userId.
  * @param {string} userId - Discord user ID
+ * @returns {object|null} User object or null if not found
  */
 export function getUserById(userId) {
   return db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
