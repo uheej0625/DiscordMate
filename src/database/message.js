@@ -1,6 +1,6 @@
 import db from './index.js';
 import { randomUUID } from 'crypto';
-import { convertToISO } from '../utils/convertToISO.js';
+import convertToISO from '../utils/convertToISO.js';
 
 /**
  * Save a message to the database.
