@@ -25,4 +25,4 @@ function convertToISO(input) {
   return new Date().toISOString();
 }
 
-export { convertToISO };
+export default convertToISO;

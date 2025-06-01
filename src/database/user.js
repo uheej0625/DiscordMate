@@ -1,5 +1,5 @@
 import db from './index.js';
-import { convertToISO } from '../utils/timestamp.js';
+import convertToISO from '../utils/convertToISO.js';
 
 /**
  * Get a user from the database by userId.
