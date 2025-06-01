@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 
 const db = new Database("./src/database/file.db");
 
-// 테이블 생성 (이미 있으면 생성하지 않음)
+// Create users table
 db.prepare(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -11,23 +11,12 @@ db.prepare(`
     username TEXT NOT NULL,
     global_name TEXT,
     preferred_name TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
   )
 `).run();
 
-// updated_at 자동 갱신 트리거 생성
-db.prepare(`
-    CREATE TRIGGER IF NOT EXISTS update_users_updated_at
-    AFTER UPDATE ON users
-    FOR EACH ROW
-    BEGIN
-      UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
-    END;
-  `
-).run();
-
-// 메세지를 저장할 테이블 생성
+// Create messages table
 db.prepare(`
   CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
@@ -36,7 +25,7 @@ db.prepare(`
     channel_id TEXT,
     guild_id TEXT,
     content TEXT NOT NULL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id)
   )
 `).run();
