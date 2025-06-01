@@ -33,6 +33,8 @@ db.prepare(`
     id TEXT PRIMARY KEY,
     discord_id TEXT UNIQUE,
     user_id TEXT NOT NULL,
+    channel_id TEXT,
+    guild_id TEXT,
     content TEXT NOT NULL,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
