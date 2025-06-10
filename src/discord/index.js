@@ -8,36 +8,59 @@ import { Client, Collection, ActivityType, ChannelType, EmbedBuilder, REST, Rout
 
 import { discordConfig } from '../config/discord.js';
 
-const __filename = fileURLToPath(import.meta.url);  // 현재 파일의 경로
-const __dirname = dirname(__filename);  // 파일 경로에서 디렉토리 추출
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-//client
+// Discord client setup
 const client = new Client({
   intents: discordConfig.intents,
   partials: discordConfig.partials
 });
 
-client.login(discordConfig.token);
+// Add connection error handling
+client.on('error', error => {
+  console.error('Discord client error:', error);
+});
+
+client.on('warn', warning => {
+  console.warn('Discord warning:', warning);
+});
+
+client.login(discordConfig.token).catch(error => {
+  console.error('Failed to login to Discord:', error);
+  process.exit(1);
+});
 
 // Slash command handling
 client.commands = new Collection();
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(`${commandsPath}`).filter(file => file.endsWith('.js'));
 
-for (const file of commandFiles) {
-  const commandPath = `${commandsPath}/${file}`;
-  const commandTemp = await import(pathToFileURL(commandPath).href);
-  const command = commandTemp.default;
-  client.commands.set(command.data.name, command);
-  commands.push(command.data);
+// Check if commands directory exists and has files
+if (fs.existsSync(commandsPath)) {
+  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+  
+  for (const file of commandFiles) {
+    const commandPath = `${commandsPath}/${file}`;
+    const commandTemp = await import(pathToFileURL(commandPath).href);
+    const command = commandTemp.default;
+    client.commands.set(command.data.name, command);
+    commands.push(command.data);
+  }
+  
+  console.log(`📝 Loaded ${commands.length} slash commands`);
+} else {
+  console.log('📝 No commands directory found, skipping command registration');
 }
 
-const rest = new REST({ version: "10" }).setToken(discordConfig.token);
-rest
-  .put(Routes.applicationCommands(discordConfig.clientId), { body: commands })
-  .then((command) => console.log(`Successfully registered ${command.length} application commands.`))
-  .catch(console.error);
+// Only register commands if there are any
+if (commands.length > 0) {
+  const rest = new REST({ version: "10" }).setToken(discordConfig.token);
+  rest
+    .put(Routes.applicationCommands(discordConfig.clientId), { body: commands })
+    .then((registeredCommands) => console.log(`✅ Successfully registered ${registeredCommands.length} application commands.`))
+    .catch(console.error);
+}
 
 // Event handling
 const eventsPath = path.join(__dirname, 'events');
@@ -52,9 +75,5 @@ for (const file of eventFiles) {
     client.on(event.name, (...args) => event.execute(...args));
   }
 }
-
-// Ignore errors
-process.on('unhandledRejection', console.error);
-process.on('uncaughtException', console.error);
 
 export default client;

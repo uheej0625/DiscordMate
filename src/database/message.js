@@ -29,7 +29,7 @@ export function saveMessage({ discordId, userId, channelId, guildId, content, cr
       content,
       isoTimestamp
     );
-  } catch (e) {
-    console.error('DB 저장 오류:', e);
+  } catch (error) {
+    console.error('Database save error:', error);
   }
 }
