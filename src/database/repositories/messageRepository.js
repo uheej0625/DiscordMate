@@ -44,32 +44,31 @@ class MessageRepository {
       return false;
     }
   }
-
   /**
-   * Get a message by its ID
+   * Find a message by its ID
    * @param {string} messageId - Message ID
    * @returns {object|null} Message object or null if not found
    */
-  getById(messageId) {
+  findById(messageId) {
     return this.db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
   }
 
   /**
-   * Get a message by Discord ID
+   * Find a message by Discord ID
    * @param {string} discordId - Discord message ID
    * @returns {object|null} Message object or null if not found
    */
-  getByDiscordId(discordId) {
+  findByDiscordId(discordId) {
     return this.db.prepare('SELECT * FROM messages WHERE discord_id = ?').get(discordId);
   }
 
   /**
-   * Get messages by user ID
+   * Find messages by user ID
    * @param {string} userId - User ID
    * @param {number} [limit=50] - Maximum number of messages to return
    * @returns {Array} Array of message objects
    */
-  getByUserId(userId, limit = 50) {
+  findByUserId(userId, limit = 50) {
     return this.db.prepare(`
       SELECT * FROM messages 
       WHERE user_id = ? 
@@ -79,12 +78,12 @@ class MessageRepository {
   }
 
   /**
-   * Get messages by channel ID
+   * Find messages by channel ID
    * @param {string} channelId - Channel ID
    * @param {number} [limit=50] - Maximum number of messages to return
    * @returns {Array} Array of message objects
    */
-  getByChannelId(channelId, limit = 50) {
+  findByChannelId(channelId, limit = 50) {
     return this.db.prepare(`
       SELECT * FROM messages 
       WHERE channel_id = ? 
@@ -98,7 +97,7 @@ class MessageRepository {
    * @param {string} messageId - Message ID
    * @returns {boolean} True if deleted, false if not found
    */
-  deleteById(messageId) {
+  delete(messageId) {
     const result = this.db.prepare('DELETE FROM messages WHERE id = ?').run(messageId);
     return result.changes > 0;
   }

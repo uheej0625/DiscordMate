@@ -4,13 +4,12 @@ import repositories from '../database/index.js';
 const { messageRepository, userRepository } = repositories;
 
 const userBuffers = new Map();
-const TIMEOUT_MS = 3000; // 2초 동안 추가 메시지 없으면 flush
+const TIMEOUT_MS = 3000;
 
 export default function handleMessage(message) {
   const userId = message.author.id;
-  
-  // 유저가 없으면 생성
-  let user = userRepository.getById(userId);
+
+  let user = userRepository.findById(userId);
   if (!user) {
     const { username = null, globalName = null } = message.author;
     userRepository.create({ userId, username, globalName });
@@ -40,7 +39,7 @@ export default function handleMessage(message) {
     const payload = {
       userInput: combinedContent,
       userId: userId,
-      timestamp: buffer.messages[0].createdTimestamp, // 첫 메시지 기준
+      timestamp: buffer.messages[0].createdTimestamp,
     };
     const reply = await getMessageResponse(payload);
     console.log(reply);

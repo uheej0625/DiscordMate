@@ -11,23 +11,23 @@ class UserRepository {
   constructor(database) {
     this.db = database;
   }
-
   /**
-   * Get a user from the database by userId.
+   * Find a user from the database by userId.
    * @param {string} userId - Discord user ID
    */
-  getById(userId) {
+  findById(userId) {
     return this.db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
   }
 
   /**
-   * Get user by username
+   * Find user by username
    * @param {string} username - Discord username
    * @returns {object|null} User object or null if not found
    */
-  getByUsername(username) {
+  findByUsername(username) {
     return this.db.prepare('SELECT * FROM users WHERE username = ?').get(username);
   }
+
   /**
    * Save a user to the database.
    * @param {object} param0
@@ -78,24 +78,23 @@ class UserRepository {
     
     return result.changes > 0;
   }
-
   /**
    * Delete user by ID
    * @param {string} userId - User ID
    * @returns {boolean} True if deleted, false if not found
    */
-  deleteById(userId) {
+  delete(userId) {
     const result = this.db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     return result.changes > 0;
   }
 
   /**
-   * Get all users with pagination
+   * Find all users with pagination
    * @param {number} [limit=50] - Maximum number of users to return
    * @param {number} [offset=0] - Number of users to skip
    * @returns {Array} Array of user objects
    */
-  getAll(limit = 50, offset = 0) {
+  findAll(limit = 50, offset = 0) {
     return this.db.prepare(`
       SELECT * FROM users 
       ORDER BY created_at DESC 
