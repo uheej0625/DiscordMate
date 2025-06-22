@@ -4,7 +4,7 @@ import repositories from '../database/index.js';
 const { messageRepository, userRepository } = repositories;
 
 const userBuffers = new Map();
-const TIMEOUT_MS = 3000;
+const TIMEOUT_MS = 10000;
 
 export default function handleMessage(message) {
   const userId = message.author.id;
