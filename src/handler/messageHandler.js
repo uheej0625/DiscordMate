@@ -1,20 +1,22 @@
 import { getMessageResponse } from '../ai/index.js';
-import { saveMessage } from '../database/message.js';
-import { getUserById, saveUser } from '../database/user.js';
+import repositories from '../database/index.js';
+
+const { messageRepository, userRepository } = repositories;
 
 const userBuffers = new Map();
 const TIMEOUT_MS = 3000; // 2초 동안 추가 메시지 없으면 flush
 
 export default function handleMessage(message) {
   const userId = message.author.id;
-
+  
   // 유저가 없으면 생성
-  let user = getUserById(userId);
+  let user = userRepository.getById(userId);
   if (!user) {
     const { username = null, globalName = null } = message.author;
-    saveUser({ userId, username, globalName });
+    userRepository.create({ userId, username, globalName });
   }
-  saveMessage({
+  
+  messageRepository.create({
     discordId: message.id,
     userId,
     channelId: message.channel.id,

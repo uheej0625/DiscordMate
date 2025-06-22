@@ -1,33 +1,16 @@
-import Database from "better-sqlite3";
+import Database from 'better-sqlite3';
+import MessageRepository from './repositories/messageRepository.js';
+import UserRepository from './repositories/userRepository.js';
+import { initializeDatabase } from './schemas/index.js';
 
-const db = new Database("./src/database/file.db");
+const db = new Database('./src/database/file.db');
 
-// Create users table
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    role TEXT CHECK(role IN ('host', 'user')) NOT NULL,
-    access TEXT CHECK(access IN ('default', 'whitelist', 'blacklist')) DEFAULT 'default',
-    username TEXT NOT NULL,
-    global_name TEXT,
-    preferred_name TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
-  )
-`).run();
+// Initialize database schema
+initializeDatabase(db);
 
-// Create messages table
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS messages (
-    id TEXT PRIMARY KEY,
-    discord_id TEXT UNIQUE,
-    user_id TEXT NOT NULL,
-    channel_id TEXT,
-    guild_id TEXT,
-    content TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  )
-`).run();
+const repositories = {
+  messageRepository: new MessageRepository(db),
+  userRepository: new UserRepository(db),
+};
 
-export default db;
+export default repositories;
