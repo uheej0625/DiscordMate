@@ -22,23 +22,39 @@ class MessageRepository {
    * @param {string} param0.content - Message content
    * @param {number|string|Date} [param0.createdAt] - createdTimestamp(ms) or Date/ISO string (optional)
    * @returns {boolean} True if created successfully, false otherwise
-   */
-  create({ discordId, userId, channelId, guildId, content, createdAt }) {
+   */  create({ discordId, userId, channelId, guildId, content, createdAt }) {
     try {
-      const isoTimestamp = convertToISO(createdAt);
-      const result = this.db.prepare(`
-        INSERT INTO messages (id, discord_id, user_id, channel_id, guild_id, content, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        randomUUID(),
-        discordId,
-        userId,
-        channelId,
-        guildId,
-        content,
-        isoTimestamp
-      );
-      return result.changes > 0;
+      if (createdAt) {
+        // 특정 시간을 지정한 경우
+        const isoTimestamp = convertToISO(createdAt);
+        const result = this.db.prepare(`
+          INSERT INTO messages (id, discord_id, user_id, channel_id, guild_id, content, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          randomUUID(),
+          discordId,
+          userId,
+          channelId,
+          guildId,
+          content,
+          isoTimestamp
+        );
+        return result.changes > 0;
+      } else {
+        // 기본값(현재 시간) 사용
+        const result = this.db.prepare(`
+          INSERT INTO messages (id, discord_id, user_id, channel_id, guild_id, content)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          randomUUID(),
+          discordId,
+          userId,
+          channelId,
+          guildId,
+          content
+        );
+        return result.changes > 0;
+      }
     } catch (error) {
       console.error('Message creation error:', error);
       return false;
@@ -100,6 +116,60 @@ class MessageRepository {
   delete(messageId) {
     const result = this.db.prepare('DELETE FROM messages WHERE id = ?').run(messageId);
     return result.changes > 0;
+  }
+
+  /**
+   * Update a message by ID
+   * @param {string} messageId - Message ID
+   * @param {object} updates - Fields to update
+   * @returns {boolean} True if updated, false if not found
+   */
+  update(messageId, updates) {
+    try {
+      const fields = Object.keys(updates);
+      if (fields.length === 0) return false;
+      
+      const setClause = fields.map(field => `${field} = ?`).join(', ');
+      const values = [...Object.values(updates), messageId];
+      
+      const result = this.db.prepare(`
+        UPDATE messages 
+        SET ${setClause}
+        WHERE id = ?
+      `).run(...values);
+      
+      return result.changes > 0;
+    } catch (error) {
+      console.error('Message update error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Update a message by Discord ID
+   * @param {string} discordId - Discord message ID
+   * @param {object} updates - Fields to update
+   * @returns {boolean} True if updated, false if not found
+   */
+  updateByDiscordId(discordId, updates) {
+    try {
+      const fields = Object.keys(updates);
+      if (fields.length === 0) return false;
+      
+      const setClause = fields.map(field => `${field} = ?`).join(', ');
+      const values = [...Object.values(updates), discordId];
+      
+      const result = this.db.prepare(`
+        UPDATE messages 
+        SET ${setClause}
+        WHERE discord_id = ?
+      `).run(...values);
+      
+      return result.changes > 0;
+    } catch (error) {
+      console.error('Message update by Discord ID error:', error);
+      return false;
+    }
   }
 }
 

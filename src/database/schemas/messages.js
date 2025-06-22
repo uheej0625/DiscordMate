@@ -10,7 +10,8 @@ export const createMessagesTable = (db) => {
       channel_id TEXT,
       guild_id TEXT,
       content TEXT NOT NULL,
-      created_at TEXT NOT NULL,
+      response_status TEXT CHECK(response_status IN ('pending', 'success', 'failed', 'processing', 'deleted')) NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `).run();
