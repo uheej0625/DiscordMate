@@ -1,4 +1,5 @@
-import { getMessageResponse } from '../ai/index.js';
+//import { getMessageResponse } from '../ai/index.js';
+import { aiService } from '../ai/aiService.js';
 import repositories from '../database/index.js';
 
 const { messageRepository, userRepository } = repositories;
@@ -17,7 +18,7 @@ export default function handleMessage(message) {
     }
 
     // Save the message to the database
-    const messageCreated = messageRepository.create({
+    messageRepository.create({
       discordId: message.id,
       userId,
       channelId: message.channel.id,
@@ -37,6 +38,8 @@ export default function handleMessage(message) {
     }
 
     buffer.timer = setTimeout(async () => {
+
+      // start processing the buffered messages
       const combinedContent = buffer.messages.map(m => m.content).join('\n');
       console.log(combinedContent);
 
@@ -51,7 +54,7 @@ export default function handleMessage(message) {
         messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: 'processing' });
       }
 
-      const reply = await getMessageResponse(payload);
+      const reply = await aiService.generateResponse(payload);
       console.log(reply);
       await message.channel.send(reply);
 

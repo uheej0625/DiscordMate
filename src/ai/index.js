@@ -1,8 +1,12 @@
 
-import {callGeminiAPI} from './providers/gemini.js';
+import { aiService } from './aiService.js';
 
-export async function getMessageResponse(payload) {
-  const response = await callGeminiAPI(payload);
-  return response.candidates?.[0]?.content?.parts?.[0]?.text || '⚠️ 응답 없음';
+// 기존 함수들을 AIService로 위임
+export async function generateMessage(payload) {
+  return await aiService.generateResponse(payload);
 }
-  // 추후 image/audio 처리 분기
+
+// AIService 인스턴스도 직접 export
+export { aiService };
+
+// 추후 image/audio 처리 분기
