@@ -1,5 +1,6 @@
 import { createUsersTable } from './users.js';
 import { createMessagesTable } from './messages.js';
+import { createModelTable } from './model.js';
 
 /**
  * Initialize all database tables
@@ -11,12 +12,14 @@ export const initializeDatabase = (db) => {
   // Create tables in order (dependencies first)
   createUsersTable(db);
   createMessagesTable(db);
-  
+  createModelTable(db);
+
   console.log('Database schema initialized successfully');
 };
 
 // Export individual schema functions for manual use
 export {
   createUsersTable,
-  createMessagesTable
+  createMessagesTable,
+  createModelTable
 };
