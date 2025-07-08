@@ -1,6 +1,7 @@
 //import { getMessageResponse } from '../ai/index.js';
 import { aiService } from '../ai/aiService.js';
 import repositories from '../database/index.js';
+import { MESSAGE_STATUS } from '../database/schemas/messages.js';
 
 const { messageRepository, userRepository } = repositories;
 const userBuffers = new Map();
@@ -51,7 +52,7 @@ export default function handleMessage(message) {
       
       // Update the status of pending messages to 'processing'
       for (const bufferedMessage of buffer.messages) {
-        messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: 'processing' });
+        messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.PROCESSING });
       }
 
       const reply = await aiService.generateResponse(payload);
@@ -60,7 +61,7 @@ export default function handleMessage(message) {
 
       // Update the status of processed messages to 'success'
       for (const bufferedMessage of buffer.messages) {
-        messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: 'success' });
+        messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.SUCCESS });
       }
 
       // Clear the buffer after processing
@@ -71,7 +72,7 @@ export default function handleMessage(message) {
     console.error('Error handling message:', error);
     for (const [userId, buffer] of userBuffers.entries()) {
       for (const bufferedMessage of buffer.messages) {
-        messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: 'failed' });
+        messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
       }
     }
   }

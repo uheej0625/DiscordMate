@@ -1,26 +1,26 @@
 import { callGeminiAPI } from './providers/gemini.js';
-import { config  } from '../../config.json';
 
 export class AIService {
-  constructor() {
-    this.provider = config.ai.provider;
-  }
 
   /**
-   * Generate AI response
-   * @param {Object} payload - { userInput, userId, timestamp }
-   * @returns {Promise<string>} - AI response text
+   * Generates an AI response based on the given provider and input.
+   * @param {Object} params - Parameters for generating a response.
+   * @param {string} params.provider - The AI provider to use (e.g., 'gemini').
+   * @param {string} params.userInput - The user's input message.
+   * @param {string} params.userId - The user's unique identifier.
+   * @param {number} params.timestamp - The timestamp of the request.
+   * @returns {Promise<string>} The generated AI response text.
    */
-  async generateResponse(payload) {
+  async generateResponse({ provider, userInput, userId, timestamp }) {
     try {
       let response;
-      
-      switch(this.provider) {
+
+      switch(provider) {
         case 'gemini':
-          response = await callGeminiAPI(payload);
+          response = await callGeminiAPI({ userInput, userId, timestamp });
           break;
         default:
-          throw new Error(`Provider '${this.provider}' is not available`);
+          throw new Error(`Provider '${provider}' is not available`);
       }
       
       return response.candidates?.[0]?.content?.parts?.[0]?.text || '⚠️ No response';
