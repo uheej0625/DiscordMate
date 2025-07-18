@@ -1,4 +1,5 @@
 import convertToISO from '../../utils/convertToISO.js';
+import { USER_ROLE, USER_ACCESS } from '../schemas/users.js';
 
 /**
  * User repository for database operations
@@ -42,9 +43,11 @@ class UserRepository {
       const now = convertToISO(createdAt);
       const result = this.db.prepare(`
         INSERT INTO users (id, role, access, username, global_name, preferred_name, created_at, updated_at)
-        VALUES (?, 'user', 'default', ?, ?, NULL, ?, ?)
+        VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
       `).run(
         userId,
+        USER_ROLE.USER,
+        USER_ACCESS.DEFAULT,
         username,
         globalName,
         now,

@@ -5,7 +5,7 @@ import { MESSAGE_STATUS } from '../database/schemas/messages.js';
 
 const { messageRepository, userRepository } = repositories;
 const userBuffers = new Map();
-const TIMEOUT_MS = 10000;
+const TIMEOUT_MS = 5000;
 
 export default function handleMessage(message) {
     try {
@@ -39,34 +39,48 @@ export default function handleMessage(message) {
     }
 
     buffer.timer = setTimeout(async () => {
+      try {
+        // start processing the buffered messages
+        const combinedContent = buffer.messages.map(m => m.content).join('\n');
+        console.log('Combined content:', combinedContent);
 
-      // start processing the buffered messages
-      const combinedContent = buffer.messages.map(m => m.content).join('\n');
-      console.log(combinedContent);
+        const payload = {
+          provider: 'gemini', // AI 프로바이더 지정
+          userInput: combinedContent,
+          userId: userId,
+          timestamp: buffer.messages[0].createdTimestamp
+        };
+        
+        // Update the status of pending messages to 'processing'
+        for (const bufferedMessage of buffer.messages) {
+          messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.PROCESSING });
+        }
 
-      const payload = {
-        userInput: combinedContent,
-        userId: userId,
-        timestamp: buffer.messages[0].createdTimestamp,
-      };
-      
-      // Update the status of pending messages to 'processing'
-      for (const bufferedMessage of buffer.messages) {
-        messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.PROCESSING });
+        const reply = await aiService.generateResponse(payload);
+        console.log('AI Response:', reply);
+        
+        // Send response to the channel of the last message
+        const lastMessage = buffer.messages[buffer.messages.length - 1];
+        await lastMessage.channel.send(reply);
+
+        // Update the status of processed messages to 'success'
+        for (const bufferedMessage of buffer.messages) {
+          messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.SUCCESS });
+        }
+
+        // Clear the buffer after processing
+        buffer.messages = [];
+        buffer.timer = null;
+      } catch (error) {
+        console.error('Error in timeout handler:', error);
+        // Update the status of failed messages
+        for (const bufferedMessage of buffer.messages) {
+          messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
+        }
+        // Clear the buffer even on error
+        buffer.messages = [];
+        buffer.timer = null;
       }
-
-      const reply = await aiService.generateResponse(payload);
-      console.log(reply);
-      await message.channel.send(reply);
-
-      // Update the status of processed messages to 'success'
-      for (const bufferedMessage of buffer.messages) {
-        messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.SUCCESS });
-      }
-
-      // Clear the buffer after processing
-      buffer.messages = [];
-      buffer.timer = null;
     }, TIMEOUT_MS);
   } catch (error) {
     console.error('Error handling message:', error);
