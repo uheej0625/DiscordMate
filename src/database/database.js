@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
-import MessageRepository from './repositories/messageRepository.js';
-import UserRepository from './repositories/userRepository.js';
+import MessageRepository from '../repositories/messageRepository.js';
+import UserRepository from '../repositories/userRepository.js';
 import { initializeDatabase } from './schemas/index.js';
 
 const db = new Database('./src/database/file.db');

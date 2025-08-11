@@ -1,6 +1,6 @@
 //import { getMessageResponse } from '../ai/index.js';
 import { aiService } from '../ai/aiService.js';
-import repositories from '../database/index.js';
+import repositories from '../database/database.js';
 import { MESSAGE_STATUS } from '../database/schemas/messages.js';
 
 const { messageRepository, userRepository } = repositories;

@@ -11,6 +11,6 @@ process.on('uncaughtException', (error) => {
 });
 
 // Discord client
-import client from './src/discord/index.js';
+import client from './discord/discord.js';
 
 console.log('🤖 DiscordMate starting...');
