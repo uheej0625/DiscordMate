@@ -1,5 +1,5 @@
 //import { getMessageResponse } from '../ai/index.js';
-import { aiService } from '../ai/aiService.js';
+import { aiService } from '../services/aiService.js';
 import repositories from '../database/database.js';
 import { MESSAGE_STATUS } from '../database/schemas/messages.js';
 
@@ -18,11 +18,29 @@ export default function handleMessage(message) {
       userRepository.create({ userId, username, globalName });
     }
 
+    let turnId;
+    if (!turnId) {
+      // Find the last message in the channel
+      const lastMsg = messageRepository.findByChannelId(message.channel.id, 1)[0];
+      if (lastMsg) {
+        if (lastMsg.author_id === userId) {
+          turnId = lastMsg.turn_id;
+        } else {
+          const lastTurnNum = lastMsg.turn_id ? parseInt(lastMsg.turn_id, 10) : 0;
+          turnId = String(lastTurnNum + 1);
+        }
+      } else {
+        turnId = "1";
+      }
+    }
+    
     // Save the message to the database
     messageRepository.create({
-      discordId: message.id,
-      userId,
+      discordMessageId: message.id,
+      authorId: userId,
+      authorRole: message.author.bot ? 'ASSISTANT' : 'USER',
       channelId: message.channel.id,
+      turnId,
       guildId: message.guild ? message.guild.id : null,
       content: message.content,
       createdAt: message.createdTimestamp,
@@ -53,7 +71,7 @@ export default function handleMessage(message) {
         
         // Update the status of pending messages to 'processing'
         for (const bufferedMessage of buffer.messages) {
-          messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.PROCESSING });
+          messageRepository.findByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.PROCESSING });
         }
 
         const reply = await aiService.generateResponse(payload);
@@ -65,7 +83,7 @@ export default function handleMessage(message) {
 
         // Update the status of processed messages to 'success'
         for (const bufferedMessage of buffer.messages) {
-          messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.SUCCESS });
+          messageRepository.findByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.SUCCESS });
         }
 
         // Clear the buffer after processing
@@ -75,7 +93,7 @@ export default function handleMessage(message) {
         console.error('Error in timeout handler:', error);
         // Update the status of failed messages
         for (const bufferedMessage of buffer.messages) {
-          messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
+          messageRepository.findByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
         }
         // Clear the buffer even on error
         buffer.messages = [];
@@ -86,7 +104,7 @@ export default function handleMessage(message) {
     console.error('Error handling message:', error);
     for (const [userId, buffer] of userBuffers.entries()) {
       for (const bufferedMessage of buffer.messages) {
-        messageRepository.updateByDiscordId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
+        messageRepository.findByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
       }
     }
   }

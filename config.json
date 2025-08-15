@@ -1,7 +1,9 @@
 {
-"ai": {
+  "ai": {
     "provider":"gemini",
-    "model":"gemini-2.5-flash"
+    "model":"gemini-2.5-flash",
+    "system_prompt":"test",
+    "user_prompt":"test"
   },
   "char":{
     "name":"Monday",

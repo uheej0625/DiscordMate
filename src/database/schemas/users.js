@@ -3,7 +3,8 @@
  */
 export const USER_ROLE = {
   HOST: 'HOST',
-  USER: 'USER'
+  USER: 'USER',
+  BOT: 'BOT'
 };
 
 /**

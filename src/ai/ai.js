@@ -1,5 +1,5 @@
 
-import { aiService } from './aiService.js';
+import { aiService } from '../services/aiService.js';
 
 // 기존 함수들을 AIService로 위임
 export async function generateMessage(payload) {

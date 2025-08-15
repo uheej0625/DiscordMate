@@ -1,5 +1,5 @@
-import { callGeminiAPI } from './providers/gemini.js';
-import { buildGeminiPrompt } from './builders/promptBuilder.js';
+import { callGeminiAPI } from '../ai/providers/gemini.js';
+import { buildGeminiPrompt } from '../ai/builders/promptBuilder.js';
 
 export class AIService {
 
@@ -19,6 +19,7 @@ export class AIService {
       switch(provider) {
         case 'gemini':
           const prompt = buildGeminiPrompt(userId, userInput, timestamp);
+          console.log('Gemini Prompt:');
           response = await callGeminiAPI(prompt);
           break;
         default:

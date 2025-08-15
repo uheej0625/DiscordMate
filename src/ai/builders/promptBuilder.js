@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../..', 'config.json'), 'utf-8'));
+
 /**
  * Loads a prompt file and replaces variables, returning it as a string.
  * @param {string} category - Prompt category (system, user)
@@ -12,9 +14,17 @@ const __dirname = path.dirname(__filename);
  * @param {Object} variables - Variables to replace
  * @returns {string} Prompt string with variables replaced
  */
-function loadAndReplaceTemplate(category, filename, variables = {}) {
+function loadAndReplaceTemplate(category, variables = {}) {
+  const systemPrompt = config.ai.system_prompt;
+  const userPrompt = config.ai.user_prompt;
+
   const promptsPath = path.join(__dirname, '..', 'prompts');
-  const filePath = path.join(promptsPath, category, `${filename}.md`);
+
+  const promptFile = category === "system" ? systemPrompt : 
+                     category === "user" ? userPrompt : 
+                     (() => { throw new Error(`Unsupported category: ${category}`) })();
+
+  const filePath = path.join(promptsPath, category, `${promptFile}.md`);
   
   const template = fs.readFileSync(filePath, 'utf-8');
   
@@ -37,28 +47,25 @@ export function buildGeminiPrompt(userId, userInput, timestamp) {
   const variables = {
     char: config.char,
     user: config.user,
-    previousStory: '', // TODO: Get from database
+    previousStory: '', // TODO: Get from ConversationService
     userInput: userInput
   };
 
-  const userPrompt = loadAndReplaceTemplate('user', 'currentInput', variables);
+  const userPrompt = loadAndReplaceTemplate('user', variables);
 
   // Build base prompt array
-  const promptArray = [
-    {
-      role: 'user',
-      parts: [{ text: loadAndReplaceTemplate('system', 'systemSetting', variables) }, { text: loadAndReplaceTemplate('system', 'references', variables) }]
-    }
-  ];
+  const promptArray = [];
 
-  // TODO: Insert conversation history here
-  // const conversationHistory = getConversationHistory(userId);
-  // promptArray.push(...conversationHistory);
+  // Add system prompt
+  promptArray.push({
+    role: 'user',
+    parts: [{ text: loadAndReplaceTemplate('system', variables) }]
+  });
 
   // Add current user input
   promptArray.push({
     role: 'user',
-    parts: [{ text: userPrompt }]
+    parts: [{ text: loadAndReplaceTemplate('user', variables) }]
   });
 
   return promptArray;
