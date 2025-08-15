@@ -13,3 +13,6 @@ package-lock.json
 
 # Database files
 src/database/file.db
+
+# TODO files
+.todo
