@@ -2,13 +2,14 @@
 import { aiService } from '../services/aiService.js';
 import repositories from '../database/database.js';
 import { MESSAGE_STATUS } from '../database/schemas/messages.js';
+import { getMessageDelay } from '../utils/messageDelay.js';
 
 const { messageRepository, userRepository } = repositories;
 const userBuffers = new Map();
 const TIMEOUT_MS = 5000;
 
 export default function handleMessage(message) {
-    try {
+  try {
     const userId = message.author.id;
 
     // Check if the user exists in the database, if not, create a new user
@@ -71,19 +72,28 @@ export default function handleMessage(message) {
         
         // Update the status of pending messages to 'processing'
         for (const bufferedMessage of buffer.messages) {
-          messageRepository.findByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.PROCESSING });
+          messageRepository.updateByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.PROCESSING });
         }
 
-        const reply = await aiService.generateResponse(payload);
-        console.log('AI Response:', reply);
-        
+        const messages = await aiService.generateResponse(payload)
+
+        console.log('AI Response:', messages);
+
         // Send response to the channel of the last message
         const lastMessage = buffer.messages[buffer.messages.length - 1];
-        await lastMessage.channel.send(reply);
+
+        // Send AI response messages
+        const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
+        for (const message of messages) {
+          await lastMessage.channel.sendTyping();
+          await sleep(getMessageDelay(message));
+          await lastMessage.channel.send(message);
+        }
 
         // Update the status of processed messages to 'success'
         for (const bufferedMessage of buffer.messages) {
-          messageRepository.findByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.SUCCESS });
+          messageRepository.updateByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.SUCCESS });
         }
 
         // Clear the buffer after processing
@@ -93,7 +103,7 @@ export default function handleMessage(message) {
         console.error('Error in timeout handler:', error);
         // Update the status of failed messages
         for (const bufferedMessage of buffer.messages) {
-          messageRepository.findByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
+          messageRepository.updateByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
         }
         // Clear the buffer even on error
         buffer.messages = [];
@@ -104,7 +114,7 @@ export default function handleMessage(message) {
     console.error('Error handling message:', error);
     for (const [userId, buffer] of userBuffers.entries()) {
       for (const bufferedMessage of buffer.messages) {
-        messageRepository.findByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
+        messageRepository.updateByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
       }
     }
   }

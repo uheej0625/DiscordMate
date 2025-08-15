@@ -1,33 +1,40 @@
 import { callGeminiAPI } from '../ai/providers/gemini.js';
 import { buildGeminiPrompt } from '../ai/builders/promptBuilder.js';
+import { parseModelJson } from '../utils/json.js';
 
 export class AIService {
-
   /**
-   * Generates an AI response based on the given provider and input.
-   * @param {Object} params - Parameters for generating a response.
-   * @param {string} params.provider - The AI provider to use (e.g., 'gemini').
-   * @param {string} params.userId - The user's unique identifier.
-   * @param {string} params.userInput - The user's input message.
-   * @param {number} params.timestamp - The timestamp of the request.
-   * @returns {Promise<string>} The generated AI response text.
+   * @returns {Promise<string[]>} 메시지 배열
    */
   async generateResponse({ provider, userId, userInput, timestamp }) {
     try {
       let response;
 
-      switch(provider) {
-        case 'gemini':
+      switch (provider) {
+        case 'gemini': {
           const prompt = buildGeminiPrompt(userId, userInput, timestamp);
-          console.log('Gemini Prompt:');
+          console.log('Gemini Prompt built');
           response = await callGeminiAPI(prompt);
           break;
+        }
         default:
           throw new Error(`Provider '${provider}' is not available`);
       }
-      
-      const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text || '⚠️ No response';
-      return responseText;
+
+      const parts = response?.candidates?.[0]?.content?.parts ?? [];
+      const responseText = parts
+        .map(p => p.text ?? '')
+        .join('\n')
+        .trim();
+
+      const obj = parseModelJson(responseText);
+      console.log('Parsed AI Response:', obj);
+
+      if (!obj || !Array.isArray(obj.messages)) {
+        throw new Error('응답 JSON에 messages 배열이 없음');
+      }
+
+      return obj.messages;
     } catch (error) {
       console.error('Generate Response Error:', error);
       throw error;
@@ -35,5 +42,4 @@ export class AIService {
   }
 }
 
-// Create singleton instance
 export const aiService = new AIService();
