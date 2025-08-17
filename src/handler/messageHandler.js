@@ -75,9 +75,7 @@ export default function handleMessage(message) {
           messageRepository.updateByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.PROCESSING });
         }
 
-        const messages = await aiService.generateResponse(payload)
-
-        console.log('AI Response:', messages);
+        const messages = await aiService.generateResponse(payload);
 
         // Send response to the channel of the last message
         const lastMessage = buffer.messages[buffer.messages.length - 1];
@@ -88,7 +86,19 @@ export default function handleMessage(message) {
         for (const message of messages) {
           await lastMessage.channel.sendTyping();
           await sleep(getMessageDelay(message));
-          await lastMessage.channel.send(message);
+          const discordMessage = await lastMessage.channel.send(message);
+
+          // Save the message to the database
+          messageRepository.create({
+            discordMessageId: discordMessage.id,
+            authorId: process.env.DISCORD_CLIENT_ID,
+            authorRole: 'ASSISTANT',
+            channelId: lastMessage.channel.id,
+            turnId,
+            guildId: lastMessage.guild ? lastMessage.guild.id : null,
+            content: message,
+            createdAt: lastMessage.createdTimestamp,
+          });
         }
 
         // Update the status of processed messages to 'success'
