@@ -3,16 +3,14 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import repositories from './database/database.js';
-
-const { messageRepository, userRepository } = repositories;
+// 함수 기반 리포지토리 import
+import * as messageRepository from './repositories/messageRepository.js';
+import * as userRepository from './repositories/userRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../', 'config.json'), 'utf-8'));
-
-
 
 // Error handling
 process.on('unhandledRejection', (reason, promise) => {
@@ -31,7 +29,7 @@ console.log('🤖 DiscordMate starting...');
 
 
 // Check if the user exists in the database, if not, create a new user
-let assistant = userRepository.findById(process.env.DISCORD_CLIENT_ID);
+let assistant = userRepository.getById(process.env.DISCORD_CLIENT_ID);
 if (!assistant) {
   const username = config.char.username;
   const globalName = config.char.global_name;
