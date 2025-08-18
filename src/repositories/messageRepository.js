@@ -29,10 +29,32 @@ class MessageRepository {
 	 * @param {number|string|Date} [param0.createdAt] - createdTimestamp(ms) or Date/ISO string (optional)
 	 * @returns {boolean} True if created successfully, false otherwise
 	 */  
-	create({ discordMessageId, conversationId, turnId, channelId, guildId, authorId, authorRole, content, attachments, responseStatus, createdAt }) {
+	create({ discordMessageId, conversationId, channelId, guildId, authorId, authorRole, content, attachments, responseStatus, createdAt }) {
 		try {
 			const attachmentsJson = attachments ? JSON.stringify(attachments) : null;
 			const status = responseStatus || MESSAGE_STATUS.PENDING;
+
+			let turnId;
+			if (!turnId) {
+				// Find the last message in the channel
+				const lastMsg = this.db.prepare(`
+					SELECT * FROM messages 
+					WHERE channel_id = ? 
+					ORDER BY created_at DESC 
+					LIMIT ?
+				`).all(channelId, 1)[0];
+
+				if (lastMsg) {
+					if (lastMsg.author_id === authorId) {
+						turnId = lastMsg.turn_id;
+					} else {
+						const lastTurnNum = lastMsg.turn_id ? parseInt(lastMsg.turn_id, 10) : 0;
+						turnId = String(lastTurnNum + 1);
+					}
+				} else {
+					turnId = "1";
+				}
+			}
 
 			if (createdAt) {
 				// 특정 시간을 지정한 경우
@@ -87,6 +109,15 @@ class MessageRepository {
 	 */
 	findById(messageId) {
 		return this.db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+	}
+
+	/**
+	 * Find a message by turnID
+	 * @param {string} turnId - Turn ID
+	 * @returns {object|null} Message object or null if not found
+	 */
+	findByTurnId(turnId) {
+		return this.db.prepare('SELECT * FROM messages WHERE turn_id = ?').get(turnId);
 	}
 
 	/**

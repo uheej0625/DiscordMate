@@ -18,22 +18,6 @@ export default function handleMessage(message) {
       const { username = null, globalName = null } = message.author;
       userRepository.create({ userId, username, globalName });
     }
-
-    let turnId;
-    if (!turnId) {
-      // Find the last message in the channel
-      const lastMsg = messageRepository.findByChannelId(message.channel.id, 1)[0];
-      if (lastMsg) {
-        if (lastMsg.author_id === userId) {
-          turnId = lastMsg.turn_id;
-        } else {
-          const lastTurnNum = lastMsg.turn_id ? parseInt(lastMsg.turn_id, 10) : 0;
-          turnId = String(lastTurnNum + 1);
-        }
-      } else {
-        turnId = "1";
-      }
-    }
     
     // Save the message to the database
     messageRepository.create({
@@ -41,7 +25,6 @@ export default function handleMessage(message) {
       authorId: userId,
       authorRole: message.author.bot ? 'ASSISTANT' : 'USER',
       channelId: message.channel.id,
-      turnId,
       guildId: message.guild ? message.guild.id : null,
       content: message.content,
       createdAt: message.createdTimestamp,
@@ -94,7 +77,6 @@ export default function handleMessage(message) {
             authorId: process.env.DISCORD_CLIENT_ID,
             authorRole: 'ASSISTANT',
             channelId: lastMessage.channel.id,
-            turnId,
             guildId: lastMessage.guild ? lastMessage.guild.id : null,
             content: message,
             createdAt: lastMessage.createdTimestamp,

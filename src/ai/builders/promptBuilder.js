@@ -2,6 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import repositories from '../../database/database.js';
+import { text } from 'stream/consumers';
+
+const { messageRepository, userRepository } = repositories;
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -41,7 +46,7 @@ function loadAndReplaceTemplate(category, variables = {}) {
  * @param {number} timestamp - Request timestamp
  * @returns {Array} Complete prompt array for Gemini API
  */
-export function buildGeminiPrompt(userId, userInput, timestamp) {
+export async function buildGeminiPrompt(userId, userInput, timestamp) {
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../..', 'config.json'), 'utf-8'));
 
   const variables = {
@@ -51,8 +56,6 @@ export function buildGeminiPrompt(userId, userInput, timestamp) {
     userInput: userInput
   };
 
-  const userPrompt = loadAndReplaceTemplate('user', variables);
-
   // Build base prompt array
   const promptArray = [];
 
@@ -61,6 +64,36 @@ export function buildGeminiPrompt(userId, userInput, timestamp) {
     role: 'user',
     parts: [{ text: loadAndReplaceTemplate('system', variables) }]
   });
+
+  // Add chat history context
+  let messages = await messageRepository.findByTurnId("1");
+  console.log(messages);
+  while (messages) {
+    if (messages[0].author_role === 'USER') {
+      const userMessages = [];
+      for (const message of messages) {
+        userMessages.push({
+          text: message.content
+        });
+      }
+      promptArray.push({
+        role: 'user',
+        parts: userMessages
+      });
+    } else if (messages[0].author_role === 'ASSISTANT') {
+      const assistantMessages = [];
+      for (const message of messages) {
+        assistantMessages.push({
+          text: message.content
+        });
+      }
+      promptArray.push({
+        role: 'assistant',
+        parts: assistantMessages
+      });
+    }
+    messages = await messageRepository.findByTurnId((Number(messages[0].turn_id) + 1).toString());
+  }
 
   // Add current user input
   promptArray.push({
