@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// 함수 기반 리포지토리 import
 import * as messageRepository from './repositories/messageRepository.js';
 import * as userRepository from './repositories/userRepository.js';
 

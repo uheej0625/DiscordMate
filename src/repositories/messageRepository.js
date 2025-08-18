@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { getDatabase } from '../database/database.js';
 import { MESSAGE_STATUS } from '../database/schemas/messages.js';
 
-// 싱글톤 데이터베이스 연결 사용
 const db = getDatabase();
 
 // Prepared statements for better performance

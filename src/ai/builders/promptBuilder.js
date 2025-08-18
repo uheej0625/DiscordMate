@@ -2,10 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import repositories from '../../database/database.js';
-import { text } from 'stream/consumers';
-
-const { messageRepository, userRepository } = repositories;
+import * as chattingService from '../../services/chattingService.js';
+import * as messageRepository from '../../repositories/messageRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,7 +44,7 @@ function loadAndReplaceTemplate(category, variables = {}) {
  * @param {number} timestamp - Request timestamp
  * @returns {Array} Complete prompt array for Gemini API
  */
-export async function buildGeminiPrompt(userId, userInput, timestamp) {
+export async function buildGeminiPrompt(userId, userInput, timestamp, channelId) {
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../..', 'config.json'), 'utf-8'));
 
   const variables = {
@@ -56,46 +54,47 @@ export async function buildGeminiPrompt(userId, userInput, timestamp) {
     userInput: userInput
   };
 
-  // Build base prompt array
-  const promptArray = [];
+    const promptArray = [];
 
-  // Add system prompt
+  // 2) System prompt (keep your existing convention)
   promptArray.push({
     role: 'user',
     parts: [{ text: loadAndReplaceTemplate('system', variables) }]
   });
 
-  // Add chat history context
-  let messages = await messageRepository.findByTurnId("1");
-  console.log(messages);
-  while (messages) {
-    if (messages[0].author_role === 'USER') {
-      const userMessages = [];
-      for (const message of messages) {
-        userMessages.push({
-          text: message.content
-        });
-      }
-      promptArray.push({
-        role: 'user',
-        parts: userMessages
-      });
-    } else if (messages[0].author_role === 'ASSISTANT') {
-      const assistantMessages = [];
-      for (const message of messages) {
-        assistantMessages.push({
-          text: message.content
-        });
-      }
-      promptArray.push({
-        role: 'assistant',
-        parts: assistantMessages
-      });
+  // 3) Load channel history in ascending timestamp order
+  //    Ensure your repository returns ascending order by message_timestamp
+  const history = await messageRepository.getByChannelId(channelId);
+
+  // 4) Fold messages into turns
+  //    currentTurn = { role: 'user'|'assistant', parts: [{ text }] }
+  const turns = [];
+  let currentTurn = null;
+
+  for (const msg of history) {
+    const content = (msg?.content ?? '').toString().trim();
+    if (!content) continue; // ignore empty
+
+    // Decide speaker role
+    const role = msg.author_id === userId ? 'user' : 'assistant';
+
+    // If same speaker as the current turn, append; else start a new turn
+    if (currentTurn && currentTurn.role === role) {
+      currentTurn.parts.push({ text: content });
+    } else {
+      if (currentTurn) turns.push(currentTurn);
+      currentTurn = { role, parts: [{ text: content }] };
     }
-    messages = await messageRepository.findByTurnId((Number(messages[0].turn_id) + 1).toString());
+  }
+  if (currentTurn) turns.push(currentTurn);
+
+  // 5) Push folded turns into promptArray
+  for (const turn of turns) {
+    promptArray.push(turn);
   }
 
-  // Add current user input
+  // 6) (Optional) Add current user input template at the end
+  //    If you call this before sending a new user message, keep it.
   promptArray.push({
     role: 'user',
     parts: [{ text: loadAndReplaceTemplate('user', variables) }]
