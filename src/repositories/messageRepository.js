@@ -1,241 +1,282 @@
-import { randomUUID } from 'crypto';
-import convertToISO from '../utils/convertToISO.js';
-import { MESSAGE_STATUS, MESSAGE_ROLE } from '../database/schemas/messages.js';
+import { randomUUID } from 'node:crypto';
+import { getDatabase } from '../database/database.js';
+import { MESSAGE_STATUS } from '../database/schemas/messages.js';
+
+const db = getDatabase();
+
+// Prepared statements for better performance
+const statements = {
+  insert: db.prepare(`
+    INSERT INTO messages (
+      id, message_id, conversation_id, compose_id,
+      channel_id, guild_id, author_id, content, thinking,
+      attachments, status, error, message_timestamp
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `),
+  
+  update: db.prepare(`
+    UPDATE messages 
+    SET content = ?, thinking = ?, attachments = ?, status = ?, 
+        error = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `),
+  
+  updateStatus: db.prepare(`
+    UPDATE messages 
+    SET status = ?, error = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `),
+  
+  findById: db.prepare('SELECT * FROM messages WHERE id = ?'),
+  findByMessageId: db.prepare('SELECT * FROM messages WHERE message_id = ?'),
+  findByConversationId: db.prepare(`
+    SELECT * FROM messages 
+    WHERE conversation_id = ? 
+    ORDER BY message_timestamp ASC
+  `),
+  findByChannelId: db.prepare(`
+    SELECT * FROM messages 
+    WHERE channel_id = ? 
+    ORDER BY message_timestamp DESC 
+    LIMIT ?
+  `),
+  findByAuthorId: db.prepare(`
+    SELECT * FROM messages 
+    WHERE author_id = ? 
+    ORDER BY message_timestamp DESC 
+    LIMIT ?
+  `),
+  findByStatus: db.prepare(`
+    SELECT * FROM messages 
+    WHERE status = ? 
+    ORDER BY message_timestamp DESC
+  `),
+  softDelete: db.prepare(`
+    UPDATE messages 
+    SET deleted_at = datetime('now'), updated_at = datetime('now')
+    WHERE id = ?
+  `),
+  hardDelete: db.prepare('DELETE FROM messages WHERE id = ?'),
+  count: db.prepare('SELECT COUNT(*) as count FROM messages WHERE deleted_at IS NULL'),
+    countByStatus: db.prepare('SELECT COUNT(*) as count FROM messages WHERE status = ? AND deleted_at IS NULL')
+};
+;
+
+// Helper function to parse attachments
+const parseMessage = (message) => {
+  if (message && message.attachments) {
+    message.attachments = JSON.parse(message.attachments);
+  }
+  return message;
+};
 
 /**
- * Message repository for database operations
+ * Create a new message
  */
-class MessageRepository {
-	/** 
-	 * Creates an instance of MessageRepository.
-	 * @param {import("better-sqlite3").Database} database - Database instance  
-	*/
-	constructor(database) {
-		this.db = database;
-	}
-	/**
-	 * Save a message to the database.
-	 * @param {object} param0
-	 * @param {string} param0.discordMessageId - Discord message ID
-	 * @param {string} [param0.conversationId] - Conversation ID (optional)
-	 * @param {string} param0.turnId - Turn ID (optional)
-	 * @param {string} param0.channelId - Discord channel ID
-	 * @param {string} [param0.guildId] - Discord guild ID (optional)
-	 * @param {string} param0.authorId - Author ID
-	 * @param {string} param0.authorRole - Author role (user/assistant)
-	 * @param {string} param0.content - Message content
-	 * @param {Array} [param0.attachments] - Message attachments (optional)
-	 * @param {string} [param0.responseStatus] - Response status (optional)
-	 * @param {number|string|Date} [param0.createdAt] - createdTimestamp(ms) or Date/ISO string (optional)
-	 * @returns {boolean} True if created successfully, false otherwise
-	 */  
-	create({ discordMessageId, conversationId, channelId, guildId, authorId, authorRole, content, attachments, responseStatus, createdAt }) {
-		try {
-			const attachmentsJson = attachments ? JSON.stringify(attachments) : null;
-			const status = responseStatus || MESSAGE_STATUS.PENDING;
+export const create = async (messageData) => {
+  const id = randomUUID();
+  const {
+    message_id,
+    conversation_id = null,
+    compose_id = null,
+    channel_id,
+    guild_id = null,
+    author_id,
+    content = null,
+    thinking = null,
+    attachments = null,
+    status = MESSAGE_STATUS.PENDING,
+    error = null,
+    message_timestamp
+  } = messageData;
 
-			let turnId;
-			if (!turnId) {
-				// Find the last message in the channel
-				const lastMsg = this.db.prepare(`
-					SELECT * FROM messages 
-					WHERE channel_id = ? 
-					ORDER BY created_at DESC 
-					LIMIT ?
-				`).all(channelId, 1)[0];
+  try {
+    statements.insert.run(
+      id, message_id, conversation_id, compose_id,
+      channel_id, guild_id, author_id, content, thinking,
+      JSON.stringify(attachments), status, error, message_timestamp
+    );
 
-				if (lastMsg) {
-					if (lastMsg.author_id === authorId) {
-						turnId = lastMsg.turn_id;
-					} else {
-						const lastTurnNum = lastMsg.turn_id ? parseInt(lastMsg.turn_id, 10) : 0;
-						turnId = String(lastTurnNum + 1);
-					}
-				} else {
-					turnId = "1";
-				}
-			}
+    return parseMessage(statements.findById.get(id));
+  } catch (error) {
+    throw new Error(`Failed to create message: ${error.message}`);
+  }
+};
 
-			if (createdAt) {
-				// 특정 시간을 지정한 경우
-				const isoTimestamp = convertToISO(createdAt);
-				const result = this.db.prepare(`
-					INSERT INTO messages (id, discord_message_id, conversation_id, turn_id, channel_id, guild_id, author_id, author_role, content, attachments_json, response_status, created_at)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				`).run(
-					randomUUID(),
-					discordMessageId,
-					conversationId,
-					turnId,
-					channelId,
-					guildId,
-					authorId,
-					authorRole,
-					content,
-					attachmentsJson,
-					status,
-					isoTimestamp
-				);
-				return result.changes > 0;
-			} else {
-				// 기본값(현재 시간) 사용
-				const result = this.db.prepare(`
-					INSERT INTO messages (id, discord_message_id, conversation_id, turn_id, channel_id, guild_id, author_id, author_role, content, attachments_json, response_status)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				`).run(
-					randomUUID(),
-					discordMessageId,
-					conversationId,
-					turnId,
-					channelId,
-					guildId,
-					authorId,
-					authorRole,
-					content,
-					attachmentsJson,
-					status
-				);
-				return result.changes > 0;
-			}
-		} catch (error) {
-			console.error('Message creation error:', error);
-			return false;
-		}
-	}
-	/**
-	 * Find a message by its ID
-	 * @param {string} messageId - Message ID
-	 * @returns {object|null} Message object or null if not found
-	 */
-	findById(messageId) {
-		return this.db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
-	}
+/**
+ * Update an existing message
+ */
+export const update = async (id, updateData) => {
+  const {
+    content,
+    thinking,
+    attachments,
+    status,
+    error
+  } = updateData;
 
-	/**
-	 * Find a message by turnID
-	 * @param {string} turnId - Turn ID
-	 * @returns {object|null} Message object or null if not found
-	 */
-	findByTurnId(turnId) {
-		return this.db.prepare('SELECT * FROM messages WHERE turn_id = ?').get(turnId);
-	}
+  try {
+    const result = statements.update.run(
+      content,
+      thinking,
+      JSON.stringify(attachments),
+      status,
+      error,
+      id
+    );
 
-	/**
-	 * Find a message by Discord message ID
-	 * @param {string} discordMessageId - Discord message ID
-	 * @returns {object|null} Message object or null if not found
-	 */
-	findByDiscordMessageId(discordMessageId) {
-		return this.db.prepare('SELECT * FROM messages WHERE discord_message_id = ?').get(discordMessageId);
-	}
+    if (result.changes === 0) {
+      return null;
+    }
 
-	/**
-	 * Find messages by author ID
-	 * @param {string} authorId - Author ID
-	 * @param {number} [limit=50] - Maximum number of messages to return
-	 * @returns {Array} Array of message objects
-	 */
-	findByAuthorId(authorId, limit = 50) {
-		return this.db.prepare(`
-			SELECT * FROM messages 
-			WHERE author_id = ? 
-			ORDER BY created_at DESC 
-			LIMIT ?
-		`).all(authorId, limit);
-	}
+    return parseMessage(statements.findById.get(id));
+  } catch (err) {
+    throw new Error(`Failed to update message: ${err.message}`);
+  }
+};
 
-	/**
-	 * Find messages by conversation ID
-	 * @param {string} conversationId - Conversation ID
-	 * @param {number} [limit=50] - Maximum number of messages to return
-	 * @returns {Array} Array of message objects
-	 */
-	findByConversationId(conversationId, limit = 50) {
-		return this.db.prepare(`
-			SELECT * FROM messages 
-			WHERE conversation_id = ? 
-			ORDER BY created_at DESC 
-			LIMIT ?
-		`).all(conversationId, limit);
-	}
+/**
+ * Update message status
+ */
+export const updateStatus = async (id, status, error = null) => {
+  try {
+    const result = statements.updateStatus.run(status, error, id);
+    
+    if (result.changes === 0) {
+      return null;
+    }
 
-		/**
-	 * Find messages by channel ID
-	 * @param {string} channelId - Channel ID
-	 * @param {number} [limit=50] - Maximum number of messages to return
-	 * @returns {Array} Array of message objects
-	 */
-	findByChannelId(channelId, limit = 50) {
-		return this.db.prepare(`
-			SELECT * FROM messages 
-			WHERE channel_id = ? 
-			ORDER BY created_at DESC 
-			LIMIT ?
-		`).all(channelId, limit);
-	}
-	/**
-	 * Delete a message by ID
-	 * @param {string} messageId - Message ID
-	 * @returns {boolean} True if deleted, false if not found
-	 */
-	delete(messageId) {
-		const result = this.db.prepare('DELETE FROM messages WHERE id = ?').run(messageId);
-		return result.changes > 0;
-	}
+    return parseMessage(statements.findById.get(id));
+  } catch (err) {
+    throw new Error(`Failed to update message status: ${err.message}`);
+  }
+};
 
-	/**
-	 * Update a message by ID
-	 * @param {string} messageId - Message ID
-	 * @param {object} updates - Fields to update
-	 * @returns {boolean} True if updated, false if not found
-	 */
-	update(messageId, updates) {
-		try {
-			const fields = Object.keys(updates);
-			if (fields.length === 0) return false;
-      
-			const setClause = fields.map(field => `${field} = ?`).join(', ');
-			const values = [...Object.values(updates), messageId];
-      
-			const result = this.db.prepare(`
-				UPDATE messages 
-				SET ${setClause}
-				WHERE id = ?
-			`).run(...values);
-      
-			return result.changes > 0;
-		} catch (error) {
-			console.error('Message update error:', error);
-			return false;
-		}
-	}
+/**
+ * Find message by ID
+ */
+export const getById = async (id) => {
+  try {
+    const message = statements.findById.get(id);
+    return parseMessage(message) || null;
+  } catch (error) {
+    throw new Error(`Failed to find message by ID: ${error.message}`);
+  }
+};
 
-	/**
-	 * Update a message by Discord message ID
-	 * @param {string} discordMessageId - Discord message ID
-	 * @param {object} updates - Fields to update
-	 * @returns {boolean} True if updated, false if not found
-	 */
-	updateByDiscordMessageId(discordMessageId, updates) {
-		try {
-			const fields = Object.keys(updates);
-			if (fields.length === 0) return false;
-      
-			const setClause = fields.map(field => `${field} = ?`).join(', ');
-			const values = [...Object.values(updates), discordMessageId];
-      
-			const result = this.db.prepare(`
-				UPDATE messages 
-				SET ${setClause}
-				WHERE discord_message_id = ?
-			`).run(...values);
-      
-			return result.changes > 0;
-		} catch (error) {
-			console.error('Message update by Discord message ID error:', error);
-			return false;
-		}
-	}
-}
+/**
+ * Find message by Discord message ID
+ */
+export const getByMessageId = async (messageId) => {
+  try {
+    const message = statements.findByMessageId.get(messageId);
+    return parseMessage(message) || null;
+  } catch (error) {
+    throw new Error(`Failed to find message by message ID: ${error.message}`);
+  }
+};
 
-export default MessageRepository;
+/**
+ * Get messages by conversation ID
+ */
+export const getByConversationId = async (conversationId) => {
+  try {
+    const messages = statements.findByConversationId.all(conversationId);
+    return messages.map(parseMessage);
+  } catch (error) {
+    throw new Error(`Failed to find messages by conversation ID: ${error.message}`);
+  }
+};
+
+/**
+ * Get recent messages by channel ID
+ */
+export const getByChannelId = async (channelId, limit = 50) => {
+  try {
+    const messages = statements.findByChannelId.all(channelId, limit);
+    return messages.map(parseMessage);
+  } catch (error) {
+    throw new Error(`Failed to find messages by channel ID: ${error.message}`);
+  }
+};
+
+/**
+ * Get messages by author ID
+ */
+export const getByAuthorId = async (authorId, limit = 100) => {
+  try {
+    const messages = statements.findByAuthorId.all(authorId, limit);
+    return messages.map(parseMessage);
+  } catch (error) {
+    throw new Error(`Failed to find messages by author ID: ${error.message}`);
+  }
+};
+
+/**
+ * Get messages by status
+ */
+export const getByStatus = async (status) => {
+  try {
+    const messages = statements.findByStatus.all(status);
+    return messages.map(parseMessage);
+  } catch (error) {
+    throw new Error(`Failed to find messages by status: ${error.message}`);
+  }
+};
+
+/**
+ * Soft delete a message
+ */
+export const deleteMessage = async (id) => {
+  try {
+    const result = statements.softDelete.run(id);
+    return result.changes > 0;
+  } catch (error) {
+    throw new Error(`Failed to delete message: ${error.message}`);
+  }
+};
+
+/**
+ * Permanently delete a message
+ */
+export const hardDelete = async (id) => {
+  try {
+    const result = statements.hardDelete.run(id);
+    return result.changes > 0;
+  } catch (error) {
+    throw new Error(`Failed to hard delete message: ${error.message}`);
+  }
+};
+
+/**
+ * Get total message count
+ */
+export const getCount = async () => {
+  try {
+    const result = statements.count.get();
+    return result.count;
+  } catch (error) {
+    throw new Error(`Failed to count messages: ${error.message}`);
+  }
+};
+
+/**
+ * Get message count by status
+ */
+export const getCountByStatus = async (status) => {
+  try {
+    const result = statements.countByStatus.get(status);
+    return result.count;
+  } catch (error) {
+    throw new Error(`Failed to count messages by status: ${error.message}`);
+  }
+};
+
+/**
+ * Close database connection
+ */
+export const close = () => {
+  db.close();
+};
+
+

@@ -6,14 +6,14 @@ export class AIService {
   /**
    * @returns {Promise<string[]>} 메시지 배열
    */
-  async generateResponse({ provider, userId, userInput, timestamp }) {
+  async generateResponse({ provider, userId, userInput, timestamp, channelId }) {
     try {
       let response;
 
       switch (provider) {
         case 'gemini': {
-          const prompt = buildGeminiPrompt(userId, userInput, timestamp);
-          console.log('Gemini Prompt built');
+          const prompt = await buildGeminiPrompt(userId, userInput, timestamp, channelId);
+          console.log('Gemini Prompt built:', prompt);
           response = await callGeminiAPI(prompt);
           break;
         }
