@@ -12,8 +12,8 @@ export class AIService {
 
       switch (provider) {
         case 'gemini': {
-          const prompt = buildGeminiPrompt(userId, userInput, timestamp, channelId);
-          console.log('Gemini Prompt built');
+          const prompt = await buildGeminiPrompt(userId, userInput, timestamp, channelId);
+          console.log('Gemini Prompt built:', prompt);
           response = await callGeminiAPI(prompt);
           break;
         }

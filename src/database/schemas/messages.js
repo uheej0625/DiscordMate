@@ -19,7 +19,6 @@ export const createMessagesTable = (db) => {
       id TEXT PRIMARY KEY,
       message_id TEXT UNIQUE NOT NULL,
       conversation_id TEXT,
-      compose_id TEXT,
 
       channel_id TEXT NOT NULL,
       guild_id TEXT,

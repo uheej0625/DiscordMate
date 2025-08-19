@@ -58,7 +58,7 @@ export default function handleMessage(message) {
           const discordMessage = await lastMessage.channel.send(message);
 
           // Save the message to the database
-          chattingService.chat(discordMessage.id, null, null, MESSAGE_STATUS.SUCCESS);
+          chattingService.chat(discordMessage, null, null, MESSAGE_STATUS.SUCCESS);
         }
 
         // Update the status of processed messages to 'success'

@@ -54,7 +54,7 @@ export async function buildGeminiPrompt(userId, userInput, timestamp, channelId)
     userInput: userInput
   };
 
-    const promptArray = [];
+  const promptArray = [];
 
   // 2) System prompt (keep your existing convention)
   promptArray.push({
@@ -76,7 +76,7 @@ export async function buildGeminiPrompt(userId, userInput, timestamp, channelId)
     if (!content) continue; // ignore empty
 
     // Decide speaker role
-    const role = msg.author_id === userId ? 'user' : 'assistant';
+    const role = msg.author_id === userId ? 'user' : 'model';
 
     // If same speaker as the current turn, append; else start a new turn
     if (currentTurn && currentTurn.role === role) {
@@ -97,7 +97,7 @@ export async function buildGeminiPrompt(userId, userInput, timestamp, channelId)
   //    If you call this before sending a new user message, keep it.
   promptArray.push({
     role: 'user',
-    parts: [{ text: loadAndReplaceTemplate('user', variables) }]
+    parts: [{ text: loadAndReplaceTemplate('user', { userInput }) }]
   });
 
   return promptArray;
