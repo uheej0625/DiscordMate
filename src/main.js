@@ -28,11 +28,11 @@ console.log('🤖 DiscordMate starting...');
 
 
 // Check if the user exists in the database, if not, create a new user
-let assistant = userRepository.getById(process.env.DISCORD_CLIENT_ID);
-if (!assistant) {
-  const username = config.char.username;
-  const globalName = config.char.global_name;
-  const preferredName = config.char.preferred_name;
+let model = userRepository.getById(process.env.DISCORD_CLIENT_ID);
+if (!model) {
+  const username = config.reference.char.username;
+  const globalName = config.reference.char.global_name;
+  const preferredName = config.reference.char.preferred_name;
 
   userRepository.create({ userId: process.env.DISCORD_CLIENT_ID, username, globalName, preferredName });
 }

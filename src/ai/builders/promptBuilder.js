@@ -48,8 +48,8 @@ export async function buildGeminiPrompt(userId, userInput, timestamp, channelId)
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../..', 'config.json'), 'utf-8'));
 
   const variables = {
-    char: config.char,
-    user: config.user,
+    char: config.reference.char,
+    user: config.reference.user,
     previousStory: '', // TODO: Get from ConversationService
     userInput: userInput
   };
