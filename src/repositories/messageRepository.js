@@ -8,10 +8,10 @@ const db = getDatabase();
 const statements = {
   insert: db.prepare(`
     INSERT INTO messages (
-      id, message_id, conversation_id, compose_id,
+      id, message_id, conversation_id, 
       channel_id, guild_id, author_id, content, thinking,
       attachments, status, error, message_timestamp
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
   
   update: db.prepare(`
@@ -78,7 +78,6 @@ export const create = async (messageData) => {
   const {
     message_id,
     conversation_id = null,
-    compose_id = null,
     channel_id,
     guild_id = null,
     author_id,
@@ -92,7 +91,7 @@ export const create = async (messageData) => {
 
   try {
     statements.insert.run(
-      id, message_id, conversation_id, compose_id,
+      id, message_id, conversation_id, 
       channel_id, guild_id, author_id, content, thinking,
       JSON.stringify(attachments), status, error, message_timestamp
     );

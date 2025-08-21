@@ -1,5 +1,6 @@
 //import { getMessageResponse } from '../ai/index.js';
 import { aiService } from '../services/aiService.js';
+import { logService } from '../services/logService.js';
 import * as chattingService from '../services/chattingService.js';
 import { MESSAGE_STATUS } from '../database/schemas/messages.js';
 import { getMessageDelay } from '../utils/messageDelay.js';
@@ -26,6 +27,8 @@ export default function handleMessage(message) {
     }
 
     buffer.timer = setTimeout(async () => {
+      const startTime = Date.now();
+      
       try {
         // start processing the buffered messages
         const combinedContent = buffer.messages.map(m => m.content).join('\n');
@@ -44,7 +47,9 @@ export default function handleMessage(message) {
           chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.PROCESSING);
         }
 
-        const messages = await aiService.generateResponse(payload);
+
+        const aiResponse = await aiService.generateResponse(payload);
+        const messages = aiResponse.messages;
 
         // Send response to the channel of the last message
         const lastMessage = buffer.messages[buffer.messages.length - 1];
@@ -58,7 +63,7 @@ export default function handleMessage(message) {
           const discordMessage = await lastMessage.channel.send(message);
 
           // Save the message to the database
-          chattingService.chat(discordMessage, null, null, MESSAGE_STATUS.SUCCESS);
+          chattingService.chat(discordMessage, aiResponse.thinking, null, MESSAGE_STATUS.SUCCESS);
         }
 
         // Update the status of processed messages to 'success'
@@ -66,11 +71,38 @@ export default function handleMessage(message) {
           chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.SUCCESS);
         }
 
+        // AI 응답 로그 기록
+        const processingTime = Date.now() - startTime;
+        
+        await logService.logAIResponse({
+          userId: userId,
+          username: lastMessage.author.username,
+          userInput: combinedContent,
+          aiThinking: aiResponse.thinking,
+          aiMessages: messages,
+          channelId: lastMessage.channel.id,
+          guildId: lastMessage.guild?.id || null,
+          processingTime: processingTime,
+          apiRequest: aiResponse.apiRequest,
+          apiResponse: aiResponse.apiResponse
+        });
+
         // Clear the buffer after processing
         buffer.messages = [];
         buffer.timer = null;
       } catch (error) {
         console.error('Error in timeout handler:', error);
+        
+        // 에러 로그 기록
+        const lastMessage = buffer.messages[buffer.messages.length - 1];
+        await logService.logError({
+          userId: userId,
+          username: lastMessage.author.username,
+          channelId: lastMessage.channel.id,
+          guildId: lastMessage.guild?.id || null,
+          error: error
+        });
+        
         // Update the status of failed messages
         for (const bufferedMessage of buffer.messages) {
           chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.FAILED, error);

@@ -65,6 +65,8 @@ if (commands.length > 0) {
 // Event handling
 const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(`${eventsPath}`).filter(file => file.endsWith('.js'));
+
+let eventCount = 0;
 for (const file of eventFiles) {
   const eventPath = `${eventsPath}/${file}`;
   const eventTemp = await import(pathToFileURL(eventPath).href);
@@ -74,6 +76,9 @@ for (const file of eventFiles) {
   } else {
     client.on(event.name, (...args) => event.execute(...args));
   }
+  eventCount++;
 }
+
+console.log(`🎧 Successfully loaded ${eventCount} event handlers`);
 
 export default client;

@@ -17,21 +17,10 @@ export const chat = async (message, thinking = null, attachments = null, status 
     });
   }
 
-  let compose_id = 1
-  const previousMessages = await messageRepository.getByChannelId(message.channel.id);
-  if (!previousMessages || previousMessages.length === 0) {
-    compose_id = 1
-  } else if (previousMessages[previousMessages.length - 1].author_id === message.author.id) {
-    compose_id = previousMessages[previousMessages.length - 1].compose_id
-  } else {
-    compose_id = previousMessages[previousMessages.length - 1].compose_id + 1
-  }
-
   messageRepository.create(
     {
       message_id: message.id,
       conversation_id: null, // Assuming conversation_id is not used here
-      compose_id,
       channel_id: message.channel.id,
       guild_id: message.guild ? message.guild.id : null,
       author_id: message.author.id,
