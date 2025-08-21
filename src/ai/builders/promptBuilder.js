@@ -62,16 +62,19 @@ export async function buildGeminiPrompt(userId, userInput, timestamp, channelId)
     parts: [{ text: loadAndReplaceTemplate('system', variables) }]
   });
 
-  // 3) Load channel history in ascending timestamp order
-  //    Ensure your repository returns ascending order by message_timestamp
+  // 3) Load channel history in descending timestamp order and reverse to get ascending order
+  //    This approach makes it easier to handle context limits by getting recent messages first
   const history = await messageRepository.getByChannelId(channelId);
+  
+  // Reverse to get ascending timestamp order (oldest first)
+  const orderedHistory = history.reverse();
 
   // 4) Fold messages into turns
   //    currentTurn = { role: 'user'|'assistant', parts: [{ text }] }
   const turns = [];
   let currentTurn = null;
 
-  for (const msg of history) {
+  for (const msg of orderedHistory) {
     const content = (msg?.content ?? '').toString().trim();
     if (!content) continue; // ignore empty
 
