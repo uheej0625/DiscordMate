@@ -1,10 +1,9 @@
-//import { getMessageResponse } from '../ai/index.js';
 import { aiService } from '../services/aiService.js';
 import { logService } from '../services/logService.js';
-import * as chattingService from '../services/chattingService.js';
 import { MESSAGE_STATUS } from '../database/schemas/messages.js';
 import { getMessageDelay } from '../utils/messageDelay.js';
-import { channel } from 'diagnostics_channel';
+import * as chattingService from '../services/chattingService.js';
+import * as messageRepository from '../repositories/messageRepository.js';
 
 const userBuffers = new Map();
 const TIMEOUT_MS = 5000;

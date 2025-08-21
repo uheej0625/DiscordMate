@@ -60,7 +60,6 @@ const statements = {
   count: db.prepare('SELECT COUNT(*) as count FROM messages WHERE deleted_at IS NULL'),
     countByStatus: db.prepare('SELECT COUNT(*) as count FROM messages WHERE status = ? AND deleted_at IS NULL')
 };
-;
 
 // Helper function to parse attachments
 const parseMessage = (message) => {
