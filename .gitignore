@@ -12,4 +12,13 @@ package-lock.json
 .vscode/
 
 # Database files
-src/db/file.db
+src/database/file.db
+src/database/file.db-shm
+src/database/file.db-wal
+
+# Media files
+media/api-request-*.json
+media/api-response-*.json
+
+# TODO files
+.todo
