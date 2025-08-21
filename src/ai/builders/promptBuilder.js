@@ -51,7 +51,8 @@ export async function buildGeminiPrompt(userId, userInput, timestamp, channelId)
     char: config.reference.char,
     user: config.reference.user,
     previousStory: '', // TODO: Get from ConversationService
-    userInput: userInput
+    userInput: userInput,
+    current_date: new Date(timestamp).toLocaleString()
   };
 
   const promptArray = [];
