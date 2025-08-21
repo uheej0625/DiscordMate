@@ -202,7 +202,7 @@ export class LogService {
 
         embed.addFields({
           name: '📎 첨부 파일',
-          value: fileInfo.join('\n') + '\n```\nAPI 원본 데이터가 포함된 파일들입니다.\n```',
+          value: fileInfo.join('\n'),
           inline: false
         });
 
