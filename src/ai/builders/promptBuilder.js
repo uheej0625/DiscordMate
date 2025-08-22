@@ -8,7 +8,7 @@ import * as messageRepository from '../../repositories/messageRepository.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../..', 'config.json'), 'utf-8'));
+import config from '../../../config.json' assert { type: 'json' };
 
 /**
  * Loads a prompt file and replaces variables, returning it as a string.
