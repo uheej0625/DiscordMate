@@ -3,22 +3,38 @@ import { logService } from '../services/logService.js';
 import { MESSAGE_STATUS } from '../database/schemas/messages.js';
 import { getMessageDelay } from '../utils/messageDelay.js';
 import * as chattingService from '../services/chattingService.js';
-import * as messageRepository from '../repositories/messageRepository.js';
 
 const userBuffers = new Map();
 const TIMEOUT_MS = 5000;
 
-export default function handleMessage(message) {
+// 취소된 메시지들의 상태를 CANCELED로 변경하는 함수
+const handleCancelledMessages = async (messagesToProcess) => {
+  console.log('AI 처리가 취소됨 - PROCESSING 메시지들을 CANCELED로 변경');
+  for (const bufferedMessage of messagesToProcess) {
+    await chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.CANCELED, 'AI 처리 취소됨');
+  }
+};
+
+export default async function handleMessage(message) {
   try {
     const userId = message.author.id;
+    const channelId = message.channel.id;
+    const bufferKey = `${userId}_${channelId}`;
     
     // Save the message to the database
-    chattingService.chat(message, null, null, MESSAGE_STATUS.PENDING);
+    await chattingService.chat(message, null, null, MESSAGE_STATUS.PENDING);
 
-    if (!userBuffers.has(userId)) {
-      userBuffers.set(userId, { messages: [], timer: null });
+    if (!userBuffers.has(bufferKey)) {
+      userBuffers.set(bufferKey, { messages: [], timer: null, abortController: null });
     }
-    const buffer = userBuffers.get(userId);
+    const buffer = userBuffers.get(bufferKey);
+    
+    // AI 처리 중이면 취소
+    if (buffer.abortController) {
+      buffer.abortController.abort();
+      console.log('AI 처리 취소됨 - 새 메시지로 인해');
+    }
+    
     buffer.messages.push(message);
 
     if (buffer.timer) {
@@ -28,47 +44,59 @@ export default function handleMessage(message) {
     buffer.timer = setTimeout(async () => {
       const startTime = Date.now();
       
+      // 현재 처리할 메시지들을 복사하고 AbortController 생성
+      const messagesToProcess = [...buffer.messages];
+      buffer.messages = [];
+      buffer.timer = null;
+      buffer.abortController = new AbortController();
+      const abortController = buffer.abortController;
+      
       try {
         // start processing the buffered messages
-        const combinedContent = buffer.messages.map(m => m.content).join('\n');
+        const combinedContent = messagesToProcess.map(m => m.content).join('\n');
         console.log('Combined content:', combinedContent);
 
         const payload = {
           provider: 'gemini', // AI 프로바이더 지정
           userInput: combinedContent,
           userId: userId,
-          timestamp: buffer.messages[0].createdTimestamp,
-          channelId: buffer.messages[0].channel.id
+          timestamp: messagesToProcess[0].createdTimestamp,
+          channelId: messagesToProcess[0].channel.id,
+          signal: abortController.signal // AbortSignal 추가
         };
         
         // Update the status of pending messages to 'processing'
-        for (const bufferedMessage of buffer.messages) {
-          chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.PROCESSING);
+        for (const bufferedMessage of messagesToProcess) {
+          await chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.PROCESSING);
         }
 
 
         const aiResponse = await aiService.generateResponse(payload);
+        
         const messages = aiResponse.messages;
 
         // Send response to the channel of the last message
-        const lastMessage = buffer.messages[buffer.messages.length - 1];
+        const lastMessage = messagesToProcess[messagesToProcess.length - 1];
 
         // Send AI response messages
         const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
-        for (const message of messages) {
+        for (const aiReply of messages) {
           await lastMessage.channel.sendTyping();
-          await sleep(getMessageDelay(message));
-          const discordMessage = await lastMessage.channel.send(message);
+          await sleep(getMessageDelay(aiReply));
+          const discordMessage = await lastMessage.channel.send(aiReply);
 
           // Save the message to the database
-          chattingService.chat(discordMessage, aiResponse.thinking, null, MESSAGE_STATUS.SUCCESS);
+          await chattingService.chat(discordMessage, aiResponse.thinking, null, MESSAGE_STATUS.SUCCESS);
         }
 
         // Update the status of processed messages to 'success'
-        for (const bufferedMessage of buffer.messages) {
-          chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.SUCCESS);
+        for (const bufferedMessage of messagesToProcess) {
+          await chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.SUCCESS);
         }
+
+        // 처리 완료 후 AbortController 해제
+        buffer.abortController = null;
 
         // AI 응답 로그 기록
         const processingTime = Date.now() - startTime;
@@ -86,14 +114,17 @@ export default function handleMessage(message) {
           apiResponse: aiResponse.apiResponse
         });
 
-        // Clear the buffer after processing
-        buffer.messages = [];
-        buffer.timer = null;
       } catch (error) {
+        // 취소된 경우는 에러 로깅하지 않음
+        if (abortController.signal.aborted) {
+          await handleCancelledMessages(messagesToProcess);
+          return;
+        }
+        
         console.error('Error in timeout handler:', error);
         
         // 에러 로그 기록
-        const lastMessage = buffer.messages[buffer.messages.length - 1];
+        const lastMessage = messagesToProcess[messagesToProcess.length - 1];
         await logService.logError({
           userId: userId,
           username: lastMessage.author.username,
@@ -103,19 +134,19 @@ export default function handleMessage(message) {
         });
         
         // Update the status of failed messages
-        for (const bufferedMessage of buffer.messages) {
-          chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.FAILED, error);
+        for (const bufferedMessage of messagesToProcess) {
+          await chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.FAILED, error);
         }
-        // Clear the buffer even on error
-        buffer.messages = [];
-        buffer.timer = null;
+        
+        // 에러 발생 시 AbortController 해제
+        buffer.abortController = null;
       }
     }, TIMEOUT_MS);
   } catch (error) {
     console.error('Error handling message:', error);
-    for (const [userId, buffer] of userBuffers.entries()) {
+    for (const [bufferKey, buffer] of userBuffers.entries()) {
       for (const bufferedMessage of buffer.messages) {
-        messageRepository.updateByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
+        await chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.FAILED);
       }
     }
   }
