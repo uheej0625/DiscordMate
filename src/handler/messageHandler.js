@@ -2,7 +2,7 @@ import { aiService } from '../services/aiService.js';
 import { logService } from '../services/logService.js';
 import { MESSAGE_STATUS } from '../database/schemas/messages.js';
 import { getMessageDelay } from '../utils/messageDelay.js';
-import * as chattingService from '../services/chattingService.js';
+import chattingService from '../services/chattingService.js';
 
 const userBuffers = new Map();
 const TIMEOUT_MS = 5000;

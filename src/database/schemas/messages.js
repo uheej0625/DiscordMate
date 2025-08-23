@@ -1,19 +1,7 @@
 /**
- * Message response status constants
- */
-export const MESSAGE_STATUS = {
-  PENDING: 'PENDING',
-  PROCESSING: 'PROCESSING',
-  SUCCESS: 'SUCCESS',
-  FAILED: 'FAILED',
-  CANCELED: 'CANCELED'
-};
-
-/**
  * Messages table schema
  */
 export const createMessagesTable = (db) => {
-  const statusValues = Object.values(MESSAGE_STATUS).map(s => `'${s}'`).join(', ');
 
   db.prepare(`
     CREATE TABLE IF NOT EXISTS messages (
@@ -21,25 +9,22 @@ export const createMessagesTable = (db) => {
       message_id TEXT UNIQUE NOT NULL,
       conversation_id TEXT,
 
-      channel_id TEXT NOT NULL,
       guild_id TEXT,
-
+      channel_id TEXT NOT NULL,
       author_id TEXT NOT NULL,
 
       content TEXT,
-      thinking TEXT,
-      attachments TEXT,
+      attachments_json TEXT,
 
-      status TEXT
-        CHECK(status IN (${statusValues})) NOT NULL 
-        DEFAULT '${MESSAGE_STATUS.PENDING}',
-      error TEXT,
+      generation_id TEXT,
 
-      message_timestamp INTEGER NOT NULL,
+      timestamp INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT,
       deleted_at TEXT, 
-      FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE RESTRICT
+
+      FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE RESTRICT,
+      FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE SET NULL
     )
   `).run();
 };
