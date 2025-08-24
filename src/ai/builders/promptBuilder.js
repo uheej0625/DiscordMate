@@ -2,8 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import * as chattingService from '../../services/chattingService.js';
-import * as messageRepository from '../../repositories/messageRepository.js';
+import chattingService from '../../services/messageService.js';
+import messageRepository from '../../repositories/messageRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,7 +65,12 @@ export async function buildGeminiPrompt(userId, userInput, timestamp, channelId)
 
   // 3) Load channel history in descending timestamp order and reverse to get ascending order
   //    This approach makes it easier to handle context limits by getting recent messages first
-  const history = await messageRepository.getByChannelId(channelId);
+  const history = await messageRepository.find({
+    channelId: channelId
+  }, {
+    orderBy: 'timestamp',
+    orderDir: 'desc'
+  });
   
   // Reverse to get ascending timestamp order (oldest first)
   const orderedHistory = history.reverse();

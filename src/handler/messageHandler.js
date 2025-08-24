@@ -1,153 +1,80 @@
-import { aiService } from '../services/aiService.js';
-import { logService } from '../services/logService.js';
-import { MESSAGE_STATUS } from '../database/schemas/messages.js';
+// handlers/handleMessage.js
+import messageService from '../services/messageService.js';
+import chattingService from '../services/chattingService.js';
+import generationRepository from '../repositories/generationRepository.js';
 import { getMessageDelay } from '../utils/messageDelay.js';
-import * as chattingService from '../services/chattingService.js';
+import { GENERATION_STATUS } from '../database/schemas/generations.js';
 
-const userBuffers = new Map();
 const TIMEOUT_MS = 5000;
-
-// 취소된 메시지들의 상태를 CANCELED로 변경하는 함수
-const handleCancelledMessages = async (messagesToProcess) => {
-  console.log('AI 처리가 취소됨 - PROCESSING 메시지들을 CANCELED로 변경');
-  for (const bufferedMessage of messagesToProcess) {
-    await chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.CANCELED, 'AI 처리 취소됨');
-  }
-};
+const timers = new Map(); // key = `${userId}:${channelId}` -> { timer, lastMessage }
 
 export default async function handleMessage(message) {
-  try {
-    const userId = message.author.id;
-    const channelId = message.channel.id;
-    const bufferKey = `${userId}_${channelId}`;
-    
-    // Save the message to the database
-    await chattingService.chat(message, null, null, MESSAGE_STATUS.PENDING);
+  // 봇 메시지는 패스
+  if (message?.author?.bot) return;
 
-    if (!userBuffers.has(bufferKey)) {
-      userBuffers.set(bufferKey, { messages: [], timer: null, abortController: null });
-    }
-    const buffer = userBuffers.get(bufferKey);
-    
-    // AI 처리 중이면 취소
-    if (buffer.abortController) {
-      buffer.abortController.abort();
-      console.log('AI 처리 취소됨 - 새 메시지로 인해');
-    }
-    
-    buffer.messages.push(message);
+  const userId = message?.author?.id;
+  const channelId = message?.channel?.id;
+  if (!userId || !channelId) return;
 
-    if (buffer.timer) {
-      clearTimeout(buffer.timer);
-    }
+  const key = `${userId}:${channelId}`;
 
-    buffer.timer = setTimeout(async () => {
-      const startTime = Date.now();
-      
-      // 현재 처리할 메시지들을 복사하고 AbortController 생성
-      const messagesToProcess = [...buffer.messages];
-      buffer.messages = [];
-      buffer.timer = null;
-      buffer.abortController = new AbortController();
-      const abortController = buffer.abortController;
-      
-      try {
-        // start processing the buffered messages
-        const combinedContent = messagesToProcess.map(m => m.content).join('\n');
-        console.log('Combined content:', combinedContent);
+  // 1) 디스코드 원문 그대로 저장
+  await messageService.create(message);
 
-        const payload = {
-          provider: 'gemini', // AI 프로바이더 지정
-          userInput: combinedContent,
-          userId: userId,
-          timestamp: messagesToProcess[0].createdTimestamp,
-          channelId: messagesToProcess[0].channel.id,
-          signal: abortController.signal // AbortSignal 추가
-        };
-        
-        // Update the status of pending messages to 'processing'
-        for (const bufferedMessage of messagesToProcess) {
-          await chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.PROCESSING);
-        }
+  // 2) 기존 배치 취소 (새 입력으로 교체)
+  chattingService.cancelActive(channelId, userId, 'new-input');
 
+  // 3) 5초 디바운스
+  if (timers.get(key)?.timer) clearTimeout(timers.get(key).timer);
+  timers.set(key, {
+    lastMessage: message,
+    timer: setTimeout(() => runBatch(key), TIMEOUT_MS),
+  });
+}
 
-        const aiResponse = await aiService.generateResponse(payload);
-        
-        const messages = aiResponse.messages;
+async function runBatch(key) {
+  const entry = timers.get(key);
+  if (!entry) return;
+  timers.delete(key);
 
-        // Send response to the channel of the last message
-        const lastMessage = messagesToProcess[messagesToProcess.length - 1];
+  const msg = entry.lastMessage;
+  const userId = msg.author.id;
+  const channelId = msg.channel.id;
 
-        // Send AI response messages
-        const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+  // UX: 타이핑(있으면 호출)
+  await msg.channel.sendTyping();
 
-        for (const aiReply of messages) {
-          await lastMessage.channel.sendTyping();
-          await sleep(getMessageDelay(aiReply));
-          const discordMessage = await lastMessage.channel.send(aiReply);
+  // 4) 배치 처리 (AI 호출/취소/DB는 chattingService가 담당)
+  const genId = await chattingService.chat(channelId, userId);
+  if (!genId) return;
 
-          // Save the message to the database
-          await chattingService.chat(discordMessage, aiResponse.thinking, null, MESSAGE_STATUS.SUCCESS);
-        }
+  // 5) 결과 가져와서 보내기 (SUCCESS만)
+  const gen = await generationRepository.findById(genId);
+  if (!gen || gen.status !== GENERATION_STATUS.SUCCESS) return;
 
-        // Update the status of processed messages to 'success'
-        for (const bufferedMessage of messagesToProcess) {
-          await chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.SUCCESS);
-        }
+  // 문자열이든 배열이든 최소 지원
+  const outs = Array.isArray(gen.ai_output) ? gen.ai_output : String(gen.ai_output ?? '').split('\n').map(s => s.trim()).filter(Boolean);
 
-        // 처리 완료 후 AbortController 해제
-        buffer.abortController = null;
+  // 기존 messageIds에 새로운 sent.id들을 누적해서 추가
+  // gen.message_ids_json은 DB에서 파싱된 배열
+  const existingMessageIds = gen.message_ids_json || [];
+  const newMessageIds = [];
 
-        // AI 응답 로그 기록
-        const processingTime = Date.now() - startTime;
-        
-        await logService.logAIResponse({
-          userId: userId,
-          username: lastMessage.author.username,
-          userInput: combinedContent,
-          aiThinking: aiResponse.thinking,
-          aiMessages: messages,
-          channelId: lastMessage.channel.id,
-          guildId: lastMessage.guild?.id || null,
-          processingTime: processingTime,
-          apiRequest: aiResponse.apiRequest,
-          apiResponse: aiResponse.apiResponse
-        });
+  for (const text of outs) {
+    await msg.channel.sendTyping();
+    await sleep(getMessageDelay(text));
+    const sent = await msg.channel.send(text);
+    // 봇이 보낸 것도 저장(필요 최소)
+    await messageService.create(sent);
+    // 새로운 메시지 ID 수집
+    newMessageIds.push(sent.id);
+  }
 
-      } catch (error) {
-        // 취소된 경우는 에러 로깅하지 않음
-        if (abortController.signal.aborted) {
-          await handleCancelledMessages(messagesToProcess);
-          return;
-        }
-        
-        console.error('Error in timeout handler:', error);
-        
-        // 에러 로그 기록
-        const lastMessage = messagesToProcess[messagesToProcess.length - 1];
-        await logService.logError({
-          userId: userId,
-          username: lastMessage.author.username,
-          channelId: lastMessage.channel.id,
-          guildId: lastMessage.guild?.id || null,
-          error: error
-        });
-        
-        // Update the status of failed messages
-        for (const bufferedMessage of messagesToProcess) {
-          await chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.FAILED, error);
-        }
-        
-        // 에러 발생 시 AbortController 해제
-        buffer.abortController = null;
-      }
-    }, TIMEOUT_MS);
-  } catch (error) {
-    console.error('Error handling message:', error);
-    for (const [bufferKey, buffer] of userBuffers.entries()) {
-      for (const bufferedMessage of buffer.messages) {
-        await chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.FAILED);
-      }
-    }
+  // 모든 메시지 전송 후 한 번에 업데이트
+  if (newMessageIds.length > 0) {
+    const updatedMessageIds = [...existingMessageIds, ...newMessageIds];
+    generationRepository.update(genId, { messageIds: updatedMessageIds });
   }
 }
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
