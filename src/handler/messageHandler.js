@@ -1,70 +1,80 @@
-import aiService from '../services/aiService.js';
+// handlers/handleMessage.js
 import messageService from '../services/messageService.js';
+import chattingService from '../services/chattingService.js';
 import generationRepository from '../repositories/generationRepository.js';
-import { logService } from '../services/logService.js';
 import { getMessageDelay } from '../utils/messageDelay.js';
-import convertToISO from '../utils/convertToISO.js';
+import { GENERATION_STATUS } from '../database/schemas/generations.js';
 
-const userBuffers = new Map();
 const TIMEOUT_MS = 5000;
-
-// 취소된 메시지들의 상태를 CANCELED로 변경하는 함수
-const handleCancelledMessages = async (messages) => {
-
-};
-
-// 버퍼된 메시지들을 실제로 처리하는 함수
-const processBufferedMessages = async (messages) => {
-
-
-
-  aiService.generateResponse({
-    provider: "GEMINI"
-  })
-};
+const timers = new Map(); // key = `${userId}:${channelId}` -> { timer, lastMessage }
 
 export default async function handleMessage(message) {
-  try {
-    const userId = message.author.id;
-    
-    messageService.create(message);
+  // 봇 메시지는 패스
+  if (message?.author?.bot) return;
 
-    // 기존 버퍼가 있으면 타이머를 취소하고 메시지를 추가
-    if (userBuffers.has(userId)) {
-      const buffer = userBuffers.get(userId);
-      clearTimeout(buffer.timeoutId);
-      buffer.messages.push(message);
-      
-      console.log(`Message added to buffer for user ${userId}. Total: ${buffer.messages.length}`);
-    } else {
-      // 새로운 버퍼 생성
-      const buffer = {
-        messages: [message],
-        timeoutId: null
-      };
-      userBuffers.set(userId, buffer);
-      
-      console.log(`New buffer created for user ${userId}`);
-    }
-    
-    // 5초 후에 버퍼된 메시지들을 처리하는 타이머 설정
-    const buffer = userBuffers.get(userId);
-    buffer.timeoutId = setTimeout(async () => {
-      const messagesToProcess = [...buffer.messages];
-      userBuffers.delete(userId);
-      
-      console.log(`Buffer timeout reached for user ${userId}. Processing ${messagesToProcess.length} messages.`);
-      
-      try {
-        await processBufferedMessages(messagesToProcess);
-      } catch (error) {
-        console.error('Error processing buffered messages:', error);
-        await handleCancelledMessages(messagesToProcess);
-      }
-    }, TIMEOUT_MS);
-    
-  } catch (error) {
-    console.error('Message handling error:', error);
-    logService.error('Message Handling Error', error);
+  const userId = message?.author?.id;
+  const channelId = message?.channel?.id;
+  if (!userId || !channelId) return;
+
+  const key = `${userId}:${channelId}`;
+
+  // 1) 디스코드 원문 그대로 저장
+  await messageService.create(message);
+
+  // 2) 기존 배치 취소 (새 입력으로 교체)
+  chattingService.cancelActive(channelId, userId, 'new-input');
+
+  // 3) 5초 디바운스
+  if (timers.get(key)?.timer) clearTimeout(timers.get(key).timer);
+  timers.set(key, {
+    lastMessage: message,
+    timer: setTimeout(() => runBatch(key), TIMEOUT_MS),
+  });
+}
+
+async function runBatch(key) {
+  const entry = timers.get(key);
+  if (!entry) return;
+  timers.delete(key);
+
+  const msg = entry.lastMessage;
+  const userId = msg.author.id;
+  const channelId = msg.channel.id;
+
+  // UX: 타이핑(있으면 호출)
+  await msg.channel.sendTyping();
+
+  // 4) 배치 처리 (AI 호출/취소/DB는 chattingService가 담당)
+  const genId = await chattingService.chat(channelId, userId);
+  if (!genId) return;
+
+  // 5) 결과 가져와서 보내기 (SUCCESS만)
+  const gen = await generationRepository.findById(genId);
+  if (!gen || gen.status !== GENERATION_STATUS.SUCCESS) return;
+
+  // 문자열이든 배열이든 최소 지원
+  const outs = Array.isArray(gen.ai_output) ? gen.ai_output : String(gen.ai_output ?? '').split('\n').map(s => s.trim()).filter(Boolean);
+
+  // 기존 messageIds에 새로운 sent.id들을 누적해서 추가
+  // gen.message_ids_json은 DB에서 파싱된 배열
+  const existingMessageIds = gen.message_ids_json || [];
+  const newMessageIds = [];
+
+  for (const text of outs) {
+    await msg.channel.sendTyping();
+    await sleep(getMessageDelay(text));
+    const sent = await msg.channel.send(text);
+    // 봇이 보낸 것도 저장(필요 최소)
+    await messageService.create(sent);
+    // 새로운 메시지 ID 수집
+    newMessageIds.push(sent.id);
+  }
+
+  // 모든 메시지 전송 후 한 번에 업데이트
+  if (newMessageIds.length > 0) {
+    const updatedMessageIds = [...existingMessageIds, ...newMessageIds];
+    generationRepository.update(genId, { messageIds: updatedMessageIds });
   }
 }
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));

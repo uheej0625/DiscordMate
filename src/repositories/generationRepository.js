@@ -165,7 +165,13 @@ class GenerationRepository {
 
     for (const [key, value] of Object.entries(updateData)) {
       if (!fieldMapping[key]) continue;
-      updates[fieldMapping[key]] = key === 'messageIds' ? JSON.stringify(value) : value;
+      
+      // Handle different field types that need JSON stringification
+      if (key === 'messageIds' || key === 'apiRequest' || key === 'apiResponse') {
+        updates[fieldMapping[key]] = JSON.stringify(value);
+      } else {
+        updates[fieldMapping[key]] = value;
+      }
     }
 
     if (Object.keys(updates).length === 0) return null;
@@ -179,7 +185,6 @@ class GenerationRepository {
       const result = this.db
       .prepare(`UPDATE generations SET ${setClause} WHERE id = ? RETURNING *`)
       .get(...values, id);
-
 
       if (!result) return null;
 

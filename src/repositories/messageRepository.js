@@ -59,9 +59,21 @@ class MessageRepository {
       
       if (!result) return null;
 
+      // Convert snake_case to camelCase for service layer
       return {
-        ...result,
-        attachments_json: result.attachments_json ? JSON.parse(result.attachments_json) : []
+        id: result.id,
+        messageId: result.message_id,
+        conversationId: result.conversation_id,
+        guildId: result.guild_id,
+        channelId: result.channel_id,
+        authorId: result.author_id,
+        content: result.content,
+        attachments: result.attachments_json ? JSON.parse(result.attachments_json) : [],
+        generationId: result.generation_id,
+        timestamp: result.timestamp,
+        createdAt: result.created_at,
+        updatedAt: result.updated_at,
+        deletedAt: result.deleted_at
       };
     } catch (err) {
       throw new Error('Failed to find message by ID', { cause: err });
@@ -82,9 +94,21 @@ class MessageRepository {
       
       if (!result) return null;
 
+      // Convert snake_case to camelCase for service layer
       return {
-        ...result,
-        attachments_json: result.attachments_json ? JSON.parse(result.attachments_json) : []
+        id: result.id,
+        messageId: result.message_id,
+        conversationId: result.conversation_id,
+        guildId: result.guild_id,
+        channelId: result.channel_id,
+        authorId: result.author_id,
+        content: result.content,
+        attachments: result.attachments_json ? JSON.parse(result.attachments_json) : [],
+        generationId: result.generation_id,
+        timestamp: result.timestamp,
+        createdAt: result.created_at,
+        updatedAt: result.updated_at,
+        deletedAt: result.deleted_at
       };
     } catch (err) {
       throw new Error('Failed to find message by message ID', { cause: err });
@@ -263,9 +287,21 @@ class MessageRepository {
 
       const results = this.db.prepare(query).all(...values);
       
+      // Convert snake_case to camelCase for service layer
       return results.map(result => ({
-        ...result,
-        attachments_json: result.attachments_json ? JSON.parse(result.attachments_json) : []
+        id: result.id,
+        messageId: result.message_id,
+        conversationId: result.conversation_id,
+        guildId: result.guild_id,
+        channelId: result.channel_id,
+        authorId: result.author_id,
+        content: result.content,
+        attachments: result.attachments_json ? JSON.parse(result.attachments_json) : [],
+        generationId: result.generation_id,
+        timestamp: result.timestamp,
+        createdAt: result.created_at,
+        updatedAt: result.updated_at,
+        deletedAt: result.deleted_at
       }));
     } catch (err) {
       throw new Error('Failed to find messages', { cause: err });

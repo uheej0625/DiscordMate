@@ -1,5 +1,5 @@
 import { ApplicationCommandType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
-import * as messageRepository from '../../repositories/messageRepository.js';
+import messageRepository from '../../repositories/messageRepository.js';
 
 export default {
   data: {
@@ -24,7 +24,7 @@ export default {
       }
 
       // DB에서 메시지 찾기
-      const messageData = await messageRepository.getByMessageId(targetMessage.id);
+      const messageData = await messageRepository.findByMessageId(targetMessage.id);
       
       if (!messageData) {
         return await interaction.reply({

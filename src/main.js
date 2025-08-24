@@ -4,8 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { USER_ROLE } from './database/schemas/users.js';
 
-import * as messageRepository from './repositories/messageRepository.js';
-import * as userRepository from './repositories/userRepository.js';
+import messageRepository from './repositories/messageRepository.js';
+import userRepository from './repositories/userRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,7 +29,7 @@ console.log('🤖 DiscordMate starting...');
 
 
 // Check if the user exists in the database, if not, create a new user
-let model = userRepository.getById(process.env.DISCORD_CLIENT_ID);
+let model = userRepository.findById(process.env.DISCORD_CLIENT_ID);
 if (!model) {
   const userId = process.env.DISCORD_CLIENT_ID;
   const username = config.reference.char.username;
