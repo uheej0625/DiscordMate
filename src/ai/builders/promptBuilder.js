@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import chattingService from '../../services/chattingService.js';
+import chattingService from '../../services/messageService.js';
 import * as messageRepository from '../../repositories/messageRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);

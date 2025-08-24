@@ -1,4 +1,4 @@
-export const MESSAGE_STATUS = {
+export const GENERATION_STATUS = {
   PENDING: 'PENDING',
   PROCESSING: 'PROCESSING',
   SUCCESS: 'SUCCESS',
@@ -9,10 +9,10 @@ export const MESSAGE_STATUS = {
 /**
  * Messages table schema
  */
-export const createMessagesTable = (db) => {
-  const statusValues = Object.values(MESSAGE_STATUS).map(s => `'${s}'`).join(', ');
+export const createGenerationsTable = (db) => {
+  const statusValues = Object.values(GENERATION_STATUS).map(s => `'${s}'`).join(', ');
   db.prepare(`
-    CREATE TABLE IF NOT EXISTS text_generations (
+    CREATE TABLE IF NOT EXISTS generations (
       id TEXT PRIMARY KEY,
       status TEXT
         CHECK(status IN (${statusValues})) NOT NULL,
@@ -24,7 +24,6 @@ export const createMessagesTable = (db) => {
       ai_thinking TEXT,
       error TEXT,
 
-      processing_time INTEGER,
       started_at TEXT NOT NULL,
       finished_at TEXT,
 
@@ -33,6 +32,8 @@ export const createMessagesTable = (db) => {
       api_response TEXT,
 
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      canceled_at TEXT,
+      reason TEXT,
       updated_at TEXT
     )
   `).run(); 

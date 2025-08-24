@@ -6,14 +6,14 @@ export class AIService {
   /**
    * @returns {Promise<Object>} AI 응답 및 메타데이터
    */
-  async generateResponse({ provider, userId, userInput, timestamp, channelId }) {
+  async generateResponse({ provider, userId, userInput, timestamp, channelId, signal }) {
     try {
       let response;
       let apiRequest;
       let apiResponse;
 
       switch (provider) {
-        case 'gemini': {
+        case 'GEMINI': {
           const prompt = await buildGeminiPrompt(userId, userInput, timestamp, channelId);
           console.log('Gemini Prompt built:', prompt);
           
@@ -49,7 +49,8 @@ export class AIService {
 
       // API 요청/응답 정보를 포함하여 반환
       return {
-        ...obj,
+        messages: obj.messages,
+        thinking: obj.thinking,
         apiRequest,
         apiResponse
       };
@@ -59,5 +60,4 @@ export class AIService {
     }
   }
 }
-
-export const aiService = new AIService();
+export default new AIService();

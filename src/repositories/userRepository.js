@@ -5,29 +5,13 @@ import { USER_ROLE, USER_ACCESS } from '../database/schemas/users.js';
 // 싱글톤 데이터베이스 연결 사용
 const db = getDatabase();
 
-// Prepared statements for better performance
-const statements = {
-  findById: db.prepare('SELECT * FROM users WHERE id = ?'),
-  findByUsername: db.prepare('SELECT * FROM users WHERE username = ?'),
-  insert: db.prepare(`
-    INSERT INTO users (id, role, access, username, global_name, preferred_name, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
-  `),
-  delete: db.prepare('DELETE FROM users WHERE id = ?'),
-  findAll: db.prepare(`
-    SELECT * FROM users 
-    ORDER BY created_at DESC 
-    LIMIT ? OFFSET ?
-  `),
-  count: db.prepare('SELECT COUNT(*) as count FROM users')
-};
-
 /**
  * Find a user from the database by userId
  */
 export const getById = (userId) => {
   try {
-    return statements.findById.get(userId) || null;
+    const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
+    return stmt.get(userId) || null;
   } catch (error) {
     throw new Error(`Failed to find user by ID: ${error.message}`);
   }
@@ -38,7 +22,8 @@ export const getById = (userId) => {
  */
 export const getByUsername = (username) => {
   try {
-    return statements.findByUsername.get(username) || null;
+    const stmt = db.prepare('SELECT * FROM users WHERE username = ?');
+    return stmt.get(username) || null;
   } catch (error) {
     throw new Error(`Failed to find user by username: ${error.message}`);
   }
@@ -47,18 +32,24 @@ export const getByUsername = (username) => {
 /**
  * Create a new user
  */
-export const create = ({ userId, username, globalName, createdAt }) => {
+export const create = ({ userId, username, globalName, role = USER_ROLE.USER }) => {
   try {
-    const now = convertToISO(createdAt);
-    const result = statements.insert.run(
+    const now = convertToISO(new Date());
+    const stmt = db.prepare(`
+      INSERT INTO users (id, role, access, username, global_name, preferred_name, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
+    `);
+    
+    const result = stmt.run(
       userId,
-      USER_ROLE.USER,
+      role,
       USER_ACCESS.DEFAULT,
       username,
       globalName,
       now,
       now
     );
+    
     return result.changes > 0;
   } catch (error) {
     console.error('User creation error:', error);
@@ -77,12 +68,13 @@ export const update = (userId, updates) => {
     const setClause = fields.map(field => `${field} = ?`).join(', ');
     const values = [...Object.values(updates), convertToISO(), userId];
 
-    const result = db.prepare(`
+    const stmt = db.prepare(`
       UPDATE users 
       SET ${setClause}, updated_at = ? 
       WHERE id = ?
-    `).run(...values);
-
+    `);
+    
+    const result = stmt.run(...values);
     return result.changes > 0;
   } catch (error) {
     throw new Error(`Failed to update user: ${error.message}`);
@@ -94,7 +86,8 @@ export const update = (userId, updates) => {
  */
 export const deleteUser = (userId) => {
   try {
-    const result = statements.delete.run(userId);
+    const stmt = db.prepare('DELETE FROM users WHERE id = ?');
+    const result = stmt.run(userId);
     return result.changes > 0;
   } catch (error) {
     throw new Error(`Failed to delete user: ${error.message}`);
@@ -106,7 +99,12 @@ export const deleteUser = (userId) => {
  */
 export const getAll = (limit = 50, offset = 0) => {
   try {
-    return statements.findAll.all(limit, offset);
+    const stmt = db.prepare(`
+      SELECT * FROM users 
+      ORDER BY created_at DESC 
+      LIMIT ? OFFSET ?
+    `);
+    return stmt.all(limit, offset);
   } catch (error) {
     throw new Error(`Failed to get all users: ${error.message}`);
   }
@@ -117,7 +115,8 @@ export const getAll = (limit = 50, offset = 0) => {
  */
 export const getCount = () => {
   try {
-    const result = statements.count.get();
+    const stmt = db.prepare('SELECT COUNT(*) as count FROM users');
+    const result = stmt.get();
     return result.count;
   } catch (error) {
     throw new Error(`Failed to count users: ${error.message}`);
@@ -129,7 +128,8 @@ export const getCount = () => {
  */
 export const exists = (userId) => {
   try {
-    const user = statements.findById.get(userId);
+    const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
+    const user = stmt.get(userId);
     return !!user;
   } catch (error) {
     throw new Error(`Failed to check if user exists: ${error.message}`);
@@ -161,33 +161,17 @@ export const getByAccess = (access) => {
 };
 
 /**
- * Update user role
- */
-export const updateRole = (userId, role) => {
-  try {
-    const result = db.prepare(`
-      UPDATE users 
-      SET role = ?, updated_at = ? 
-      WHERE id = ?
-    `).run(role, convertToISO(), userId);
-    
-    return result.changes > 0;
-  } catch (error) {
-    throw new Error(`Failed to update user role: ${error.message}`);
-  }
-};
-
-/**
  * Update user access level
  */
 export const updateAccess = (userId, access) => {
   try {
-    const result = db.prepare(`
+    const stmt = db.prepare(`
       UPDATE users 
       SET access = ?, updated_at = ? 
       WHERE id = ?
-    `).run(access, convertToISO(), userId);
+    `);
     
+    const result = stmt.run(access, convertToISO(), userId);
     return result.changes > 0;
   } catch (error) {
     throw new Error(`Failed to update user access: ${error.message}`);
