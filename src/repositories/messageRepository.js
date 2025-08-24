@@ -3,6 +3,35 @@ import convertToISO from '../utils/convertToISO.js';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
+ * @typedef {Object} MessageUpdateData
+ * @property {string} [messageId] - Discord message ID
+ * @property {string} [conversationId] - Conversation ID
+ * @property {string} [guildId] - Discord guild ID
+ * @property {string} [channelId] - Discord channel ID
+ * @property {string} [authorId] - Author's user ID
+ * @property {string} [content] - Message content
+ * @property {Array} [attachments] - Message attachments
+ * @property {string} [generationId] - AI generation ID
+ * @property {number} [timestamp] - Message timestamp
+ * @property {string} [deletedAt] - Deletion timestamp
+ */
+
+const fieldMapping = {
+  messageId: 'message_id',
+  conversationId: 'conversation_id',
+  guildId: 'guild_id',
+  channelId: 'channel_id',
+  authorId: 'author_id',
+  content: 'content',
+  attachments: 'attachments_json',
+  generationId: 'generation_id',
+  timestamp: 'timestamp',
+  deletedAt: 'deleted_at',
+  createdAt: 'created_at',
+  updatedAt: 'updated_at'
+};
+
+/**
  * Message Repository Class
  * Handles all database operations related to messages
  * @class MessageRepository
@@ -23,10 +52,19 @@ class MessageRepository {
    * @throws {Error} If the database operation fails
    */
   findById(id) {
+    if (!id) return null;
+
     try {
-      return this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id) || null;
-    } catch (error) {
-      throw new Error(`Failed to find message by ID: ${error.message}`);
+      const result = this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id);
+      
+      if (!result) return null;
+
+      return {
+        ...result,
+        attachments_json: result.attachments_json ? JSON.parse(result.attachments_json) : []
+      };
+    } catch (err) {
+      throw new Error('Failed to find message by ID', { cause: err });
     }
   }
 
@@ -37,297 +75,217 @@ class MessageRepository {
    * @throws {Error} If the database operation fails
    */
   findByMessageId(messageId) {
-    try {
-      return this.db.prepare('SELECT * FROM messages WHERE message_id = ?').get(messageId) || null;
-    } catch (error) {
-      throw new Error(`Failed to find message by message ID: ${error.message}`);
-    }
-  }
+    if (!messageId) return null;
 
-  /**
-   * Find messages by channel ID with pagination
-   * @param {string} channelId - The Discord channel ID
-   * @param {number} [limit=50] - Maximum number of messages to return
-   * @param {number} [offset=0] - Number of messages to skip
-   * @returns {Array<Object>} Array of message objects
-   * @throws {Error} If the database operation fails
-   */
-  findByChannelId(channelId, limit = 50, offset = 0) {
     try {
-      return this.db.prepare(`
-        SELECT * FROM messages 
-        WHERE channel_id = ? AND deleted_at IS NULL
-        ORDER BY timestamp DESC 
-        LIMIT ? OFFSET ?
-      `).all(channelId, limit, offset);
-    } catch (error) {
-      throw new Error(`Failed to find messages by channel ID: ${error.message}`);
-    }
-  }
+      const result = this.db.prepare('SELECT * FROM messages WHERE message_id = ?').get(messageId);
+      
+      if (!result) return null;
 
-  /**
-   * Find messages by conversation ID
-   * @param {string} conversationId - The conversation ID
-   * @returns {Array<Object>} Array of message objects ordered by timestamp
-   * @throws {Error} If the database operation fails
-   */
-  findByConversationId(conversationId) {
-    try {
-      return this.db.prepare(`
-        SELECT * FROM messages 
-        WHERE conversation_id = ? AND deleted_at IS NULL
-        ORDER BY timestamp ASC
-      `).all(conversationId);
-    } catch (error) {
-      throw new Error(`Failed to find messages by conversation ID: ${error.message}`);
-    }
-  }
-
-  /**
-   * Find messages by author ID with pagination
-   * @param {string} authorId - The author's user ID
-   * @param {number} [limit=50] - Maximum number of messages to return
-   * @param {number} [offset=0] - Number of messages to skip
-   * @returns {Array<Object>} Array of message objects
-   * @throws {Error} If the database operation fails
-   */
-  findByAuthorId(authorId, limit = 50, offset = 0) {
-    try {
-      return this.db.prepare(`
-        SELECT * FROM messages 
-        WHERE author_id = ? AND deleted_at IS NULL
-        ORDER BY timestamp DESC 
-        LIMIT ? OFFSET ?
-      `).all(authorId, limit, offset);
-    } catch (error) {
-      throw new Error(`Failed to find messages by author ID: ${error.message}`);
+      return {
+        ...result,
+        attachments_json: result.attachments_json ? JSON.parse(result.attachments_json) : []
+      };
+    } catch (err) {
+      throw new Error('Failed to find message by message ID', { cause: err });
     }
   }
 
   /**
    * Create a new message
-   * @param {Object} messageData - The message data
-   * @param {string} messageData.id - Unique message ID
-   * @param {string} messageData.messageId - Discord message ID
-   * @param {string} messageData.channelId - Discord channel ID
-   * @param {string} messageData.authorId - Author's user ID
-   * @param {number} messageData.timestamp - Message timestamp
-   * @param {string} [messageData.conversationId] - Conversation ID
-   * @param {string} [messageData.guildId] - Discord guild ID
-   * @param {string} [messageData.content] - Message content
-   * @param {Array} [messageData.attachments] - Message attachments
-   * @param {string} [messageData.generationId] - AI generation ID
+   * @param {MessageUpdateData} messageData - The message data
    * @returns {Object|null} The created message object or null if creation failed
    * @throws {Error} If the database operation fails
    */
   create(messageData) {
+    if (!messageData || Object.keys(messageData).length === 0) return null;
+
+    const id = uuidv4();
+    const now = convertToISO();
+    const data = { ...messageData, id, createdAt: now, updatedAt: now };
+    
+    const fields = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (!fieldMapping[key] && key !== 'id' && key !== 'createdAt' && key !== 'updatedAt') continue;
+      
+      if (key === 'id') fields.id = value;
+      else if (key === 'createdAt') fields.created_at = value;
+      else if (key === 'updatedAt') fields.updated_at = value;
+      else if (fieldMapping[key]) {
+        fields[fieldMapping[key]] = key === 'attachments' ? JSON.stringify(value) : value;
+      }
+    }
+
+    if (Object.keys(fields).length === 0) return null;
+
+    const columns = Object.keys(fields).join(', ');
+    const placeholders = Object.keys(fields).map(() => '?').join(', ');
+    const values = Object.values(fields);
+
     try {
-      const id = uuidv4();
-      const {
-        messageId,
-        conversationId = null,
-        guildId = null,
-        channelId,
-        authorId,
-        content = null,
-        attachments = null,
-        generationId = null,
-        timestamp
-      } = messageData;
+      const result = this.db
+        .prepare(`INSERT INTO messages (${columns}) VALUES (${placeholders}) RETURNING *`)
+        .get(...values);
 
-      const attachmentsJson = attachments ? JSON.stringify(attachments) : null;
+      if (!result) return null;
 
-      const result = this.db.prepare(`
-        INSERT INTO messages (
-          id, message_id, conversation_id, guild_id, channel_id, 
-          author_id, content, attachments_json, generation_id, 
-          timestamp
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        messageId,
-        conversationId,
-        guildId,
-        channelId,
-        authorId,
-        content,
-        attachmentsJson,
-        generationId,
-        timestamp
-      );
-
-      return result.changes > 0 ? this.findById(id) : null;
-    } catch (error) {
-      throw new Error(`Failed to create message: ${error.message}`);
+      return {
+        ...result,
+        attachments_json: result.attachments_json ? JSON.parse(result.attachments_json) : []
+      };
+    } catch (err) {
+      throw new Error('Failed to create message', { cause: err });
     }
   }
 
   /**
-   * Update an existing message
-   * @param {string} id - The message ID to update
-   * @param {Object} updates - The fields to update
-   * @param {string} [updates.content] - New message content
-   * @param {Array} [updates.attachments] - New attachments array
-   * @returns {Object|null} The updated message object or null if update failed
+   * Update a message with flexible field updates
+   * @param {string} id - The message ID
+   * @param {MessageUpdateData} updateData - Data to update
+   * @returns {Object|null} The updated message object or null if not found
    * @throws {Error} If the database operation fails
    */
-  update(id, updates) {
+  update(id, updateData) {
+    if (!updateData || Object.keys(updateData).length === 0) return null;
+
+    const now = convertToISO();
+    const updates = {};
+
+    for (const [key, value] of Object.entries(updateData)) {
+      if (!fieldMapping[key]) continue;
+      updates[fieldMapping[key]] = key === 'attachments' ? JSON.stringify(value) : value;
+    }
+
+    if (Object.keys(updates).length === 0) return null;
+
+    updates.updated_at = now;
+
+    const setClause = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+    const values = Object.values(updates);
+
     try {
-      const { content, attachments } = updates;
-      const attachmentsJson = attachments ? JSON.stringify(attachments) : null;
-      const now = convertToISO();
+      const result = this.db
+        .prepare(`UPDATE messages SET ${setClause} WHERE id = ? RETURNING *`)
+        .get(...values, id);
 
-      const result = this.db.prepare(`
-        UPDATE messages 
-        SET content = ?, attachments_json = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
-        content,
-        attachmentsJson,
-        now,
-        id
-      );
+      if (!result) return null;
 
-      return result.changes > 0 ? this.findById(id) : null;
-    } catch (error) {
-      throw new Error(`Failed to update message: ${error.message}`);
+      return {
+        ...result,
+        attachments_json: result.attachments_json ? JSON.parse(result.attachments_json) : []
+      };
+    } catch (err) {
+      throw new Error('Failed to update message', { cause: err });
     }
   }
 
   /**
-   * Soft delete a message (sets deleted_at timestamp)
-   * @param {string} id - The message ID to delete
+   * Delete a message by ID (soft delete)
+   * @param {string} id - The message ID
    * @returns {boolean} True if deletion was successful, false otherwise
    * @throws {Error} If the database operation fails
    */
-  softDelete(id) {
+  delete(id) {
+    if (!id) return false;
+
     try {
       const now = convertToISO();
-      const result = this.db.prepare(`
-        UPDATE messages 
-        SET deleted_at = ?
-        WHERE id = ?
-      `).run(now, id);
+      const result = this.db.prepare('UPDATE messages SET deleted_at = ? WHERE id = ?').run(now, id);
       return result.changes > 0;
-    } catch (error) {
-      throw new Error(`Failed to soft delete message: ${error.message}`);
+    } catch (err) {
+      throw new Error('Failed to delete message', { cause: err });
     }
   }
 
   /**
-   * Hard delete a message (permanently removes from database)
-   * @param {string} id - The message ID to delete
+   * Find messages with flexible conditions
+   * @param {Object} [conditions] - Search conditions using camelCase
+   * @param {string} [conditions.channelId] - Filter by channel ID
+   * @param {string} [conditions.authorId] - Filter by author ID
+   * @param {string} [conditions.conversationId] - Filter by conversation ID
+   * @param {string} [conditions.generationId] - Filter by generation ID
+   * @param {string} [conditions.content] - Filter by content (partial match)
+   * @param {boolean} [conditions.includeDeleted] - Include deleted messages
+   * @param {Object} [options] - Query options
+   * @param {number} [options.limit] - Limit number of results
+   * @param {number} [options.offset] - Offset for pagination
+   * @param {string} [options.orderBy] - Field to order by (camelCase)
+   * @param {string} [options.orderDir] - Order direction ('asc' or 'desc')
+   * @returns {Array<Object>} Array of message objects
+   * @throws {Error} If the database operation fails
+   */
+  find(conditions = {}, options = {}) {
+    try {
+      let query = 'SELECT * FROM messages';
+      const whereConditions = [];
+      const values = [];
+
+      // Default: exclude deleted messages unless specifically requested
+      if (!conditions.includeDeleted) {
+        whereConditions.push('deleted_at IS NULL');
+      }
+
+      // Build WHERE conditions
+      for (const [key, value] of Object.entries(conditions)) {
+        if (value === undefined || value === null || key === 'includeDeleted') continue;
+        
+        const dbColumn = fieldMapping[key] || key;
+        
+        // String fields use LIKE for partial matching
+        if (key === 'content') {
+          whereConditions.push(`${dbColumn} LIKE ?`);
+          values.push(`%${value}%`);
+        } else {
+          whereConditions.push(`${dbColumn} = ?`);
+          values.push(value);
+        }
+      }
+
+      if (whereConditions.length > 0) {
+        query += ' WHERE ' + whereConditions.join(' AND ');
+      }
+
+      // Add ORDER BY
+      const orderBy = options.orderBy ? (fieldMapping[options.orderBy] || options.orderBy) : 'timestamp';
+      const orderDir = options.orderDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      query += ` ORDER BY ${orderBy} ${orderDir}`;
+
+      // Add LIMIT and OFFSET
+      if (options.limit) {
+        query += ' LIMIT ?';
+        values.push(options.limit);
+      }
+
+      if (options.offset) {
+        query += ' OFFSET ?';
+        values.push(options.offset);
+      }
+
+      const results = this.db.prepare(query).all(...values);
+      
+      return results.map(result => ({
+        ...result,
+        attachments_json: result.attachments_json ? JSON.parse(result.attachments_json) : []
+      }));
+    } catch (err) {
+      throw new Error('Failed to find messages', { cause: err });
+    }
+  }
+
+  /**
+   * Hard delete a message by ID
+   * @param {string} id - The message ID
    * @returns {boolean} True if deletion was successful, false otherwise
    * @throws {Error} If the database operation fails
    */
   hardDelete(id) {
+    if (!id) return false;
+
     try {
       const result = this.db.prepare('DELETE FROM messages WHERE id = ?').run(id);
       return result.changes > 0;
-    } catch (error) {
-      throw new Error(`Failed to hard delete message: ${error.message}`);
-    }
-  }
-
-  /**
-   * Get total count of non-deleted messages
-   * @returns {number} The total count of messages
-   * @throws {Error} If the database operation fails
-   */
-  count() {
-    try {
-      const result = this.db.prepare('SELECT COUNT(*) as count FROM messages WHERE deleted_at IS NULL').get();
-      return result.count;
-    } catch (error) {
-      throw new Error(`Failed to count messages: ${error.message}`);
-    }
-  }
-
-  /**
-   * Get count of non-deleted messages in a specific channel
-   * @param {string} channelId - The Discord channel ID
-   * @returns {number} The count of messages in the channel
-   * @throws {Error} If the database operation fails
-   */
-  countByChannel(channelId) {
-    try {
-      const result = this.db.prepare(`
-        SELECT COUNT(*) as count FROM messages 
-        WHERE channel_id = ? AND deleted_at IS NULL
-      `).get(channelId);
-      return result.count;
-    } catch (error) {
-      throw new Error(`Failed to count messages by channel: ${error.message}`);
-    }
-  }
-
-  /**
-   * Search messages by content with pagination
-   * @param {string} query - The search query string
-   * @param {number} [limit=50] - Maximum number of messages to return
-   * @param {number} [offset=0] - Number of messages to skip
-   * @returns {Array<Object>} Array of matching message objects
-   * @throws {Error} If the database operation fails
-   */
-  search(query, limit = 50, offset = 0) {
-    try {
-      const searchStmt = this.db.prepare(`
-        SELECT * FROM messages 
-        WHERE content LIKE ? AND deleted_at IS NULL
-        ORDER BY timestamp DESC 
-        LIMIT ? OFFSET ?
-      `);
-      
-      return searchStmt.all(`%${query}%`, limit, offset);
-    } catch (error) {
-      throw new Error(`Failed to search messages: ${error.message}`);
-    }
-  }
-
-  /**
-   * Find messages within a specific date range
-   * @param {number} startTimestamp - Start timestamp (inclusive)
-   * @param {number} endTimestamp - End timestamp (inclusive)
-   * @param {number} [limit=100] - Maximum number of messages to return
-   * @param {number} [offset=0] - Number of messages to skip
-   * @returns {Array<Object>} Array of message objects within the date range
-   * @throws {Error} If the database operation fails
-   */
-  findByDateRange(startTimestamp, endTimestamp, limit = 100, offset = 0) {
-    try {
-      const dateRangeStmt = this.db.prepare(`
-        SELECT * FROM messages 
-        WHERE timestamp BETWEEN ? AND ? AND deleted_at IS NULL
-        ORDER BY timestamp DESC 
-        LIMIT ? OFFSET ?
-      `);
-      
-      return dateRangeStmt.all(startTimestamp, endTimestamp, limit, offset);
-    } catch (error) {
-      throw new Error(`Failed to find messages by date range: ${error.message}`);
-    }
-  }
-
-  /**
-   * Find messages that have attachments
-   * @param {number} [limit=50] - Maximum number of messages to return
-   * @param {number} [offset=0] - Number of messages to skip
-   * @returns {Array<Object>} Array of message objects with attachments
-   * @throws {Error} If the database operation fails
-   */
-  findWithAttachments(limit = 50, offset = 0) {
-    try {
-      const attachmentStmt = this.db.prepare(`
-        SELECT * FROM messages 
-        WHERE attachments_json IS NOT NULL AND deleted_at IS NULL
-        ORDER BY timestamp DESC 
-        LIMIT ? OFFSET ?
-      `);
-      
-      return attachmentStmt.all(limit, offset);
-    } catch (error) {
-      throw new Error(`Failed to find messages with attachments: ${error.message}`);
+    } catch (err) {
+      throw new Error('Failed to hard delete message', { cause: err });
     }
   }
 }

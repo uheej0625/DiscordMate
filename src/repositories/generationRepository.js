@@ -4,6 +4,37 @@ import { v4 as uuidv4 } from 'uuid';
 import { GENERATION_STATUS } from '../database/schemas/generations.js';
 
 /**
+ * @typedef {Object} GenerationUpdateData
+ * @property {string} [status] - Generation status
+ * @property {string} [aiOutput] - AI generated output
+ * @property {string} [aiThinking] - AI thinking process
+ * @property {string} [finishedAt] - Finished timestamp
+ * @property {string} [startedAt] - Started timestamp
+ * @property {string} [apiProvider] - API provider name
+ * @property {string} [apiRequest] - API request data
+ * @property {string} [apiResponse] - API response data
+ * @property {string} [userInput] - User input text
+ * @property {string[]} [messageIds] - Related message IDs
+ * @property {string} [reasons] - Reasons for status change
+ */
+
+const fieldMapping = {
+  status: 'status',
+  aiOutput: 'ai_output',
+  aiThinking: 'ai_thinking',
+  finishedAt: 'finished_at',
+  startedAt: 'started_at',
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
+  apiProvider: 'api_provider',
+  apiRequest: 'api_request',
+  apiResponse: 'api_response',
+  userInput: 'user_input',
+  messageIds: 'message_ids_json',
+  reasons: 'reasons'
+};
+
+/**
  * Generation Repository Class
  * Handles all database operations related to AI generations
  * @class GenerationRepository
@@ -24,138 +55,66 @@ class GenerationRepository {
    * @throws {Error} If the database operation fails
    */
   findById(id) {
-    try {
-      const generation = this.db.prepare('SELECT * FROM generations WHERE id = ?').get(id);
-      if (generation) {
-        // Parse JSON fields
-        generation.message_ids_json = JSON.parse(generation.message_ids_json);
-      }
-      return generation || null;
-    } catch (error) {
-      throw new Error(`Failed to find generation by ID: ${error.message}`);
-    }
-  }
+    if (!id) return null;
 
-  /**
-   * Find generations by status
-   * @param {string} status - The generation status (GENERATION_STATUS enum)
-   * @param {number} [limit=50] - Maximum number of generations to return
-   * @param {number} [offset=0] - Number of generations to skip
-   * @returns {Array<Object>} Array of generation objects
-   * @throws {Error} If the database operation fails
-   */
-  findByStatus(status, limit = 50, offset = 0) {
     try {
-      const generations = this.db.prepare(`
-        SELECT * FROM generations 
-        WHERE status = ? 
-        ORDER BY created_at DESC 
-        LIMIT ? OFFSET ?
-      `).all(status, limit, offset);
+      const result = this.db.prepare('SELECT * FROM generations WHERE id = ?').get(id);
       
-      // Parse JSON fields for each generation
-      return generations.map(generation => ({
-        ...generation,
-        message_ids_json: JSON.parse(generation.message_ids_json)
-      }));
-    } catch (error) {
-      throw new Error(`Failed to find generations by status: ${error.message}`);
-    }
-  }
+      if (!result) return null;
 
-  /**
-   * Find generations by API provider
-   * @param {string} apiProvider - The API provider name
-   * @param {number} [limit=50] - Maximum number of generations to return
-   * @param {number} [offset=0] - Number of generations to skip
-   * @returns {Array<Object>} Array of generation objects
-   * @throws {Error} If the database operation fails
-   */
-  findByApiProvider(apiProvider, limit = 50, offset = 0) {
-    try {
-      const generations = this.db.prepare(`
-        SELECT * FROM generations 
-        WHERE api_provider = ? 
-        ORDER BY created_at DESC 
-        LIMIT ? OFFSET ?
-      `).all(apiProvider, limit, offset);
-      
-      // Parse JSON fields for each generation
-      return generations.map(generation => ({
-        ...generation,
-        message_ids_json: JSON.parse(generation.message_ids_json)
-      }));
-    } catch (error) {
-      throw new Error(`Failed to find generations by API provider: ${error.message}`);
-    }
-  }
-
-  /**
-   * Find generations within a date range
-   * @param {string} startDate - Start date in ISO format
-   * @param {string} endDate - End date in ISO format
-   * @param {number} [limit=100] - Maximum number of generations to return
-   * @param {number} [offset=0] - Number of generations to skip
-   * @returns {Array<Object>} Array of generation objects
-   * @throws {Error} If the database operation fails
-   */
-  findByDateRange(startDate, endDate, limit = 100, offset = 0) {
-    try {
-      const generations = this.db.prepare(`
-        SELECT * FROM generations 
-        WHERE started_at >= ? AND started_at <= ?
-        ORDER BY started_at DESC 
-        LIMIT ? OFFSET ?
-      `).all(startDate, endDate, limit, offset);
-      
-      // Parse JSON fields for each generation
-      return generations.map(generation => ({
-        ...generation,
-        message_ids_json: JSON.parse(generation.message_ids_json)
-      }));
-    } catch (error) {
-      throw new Error(`Failed to find generations by date range: ${error.message}`);
+      return {
+        ...result,
+        message_ids_json: result.message_ids_json ? JSON.parse(result.message_ids_json) : []
+      };
+    } catch (err) {
+      throw new Error('Failed to find generation by ID', { cause: err });
     }
   }
 
   /**
    * Create a new generation record
-   * @param {Object} generationData - The generation data
-   * @param {Array<string>} generationData.messageIds - Array of Discord message IDs
-   * @param {string} [generationData.userInput] - User input that triggered the generation
-   * @param {string} [generationData.apiProvider] - API provider name
-   * @param {string} [generationData.apiRequest] - API request data
+   * @param {GenerationUpdateData} generationData - The generation data
    * @returns {Object|null} The created generation object or null if creation failed
    * @throws {Error} If the database operation fails
    */
   create(generationData) {
+    if (!generationData || Object.keys(generationData).length === 0) return null;
+
+    const id = uuidv4();
+    const now = convertToISO();
+    const data = { ...generationData, id, createdAt: now, updatedAt: now };
+    
+    const fields = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (!fieldMapping[key] && key !== 'id' && key !== 'createdAt' && key !== 'updatedAt') continue;
+      
+      if (key === 'id') fields.id = value;
+      else if (key === 'createdAt') fields.created_at = value;
+      else if (key === 'updatedAt') fields.updated_at = value;
+      else if (fieldMapping[key]) {
+        fields[fieldMapping[key]] = key === 'messageIds' ? JSON.stringify(value) : value;
+      }
+    }
+
+    if (Object.keys(fields).length === 0) return null;
+
+    const columns = Object.keys(fields).join(', ');
+    const placeholders = Object.keys(fields).map(() => '?').join(', ');
+    const values = Object.values(fields);
+
     try {
-      const id = uuidv4();
-      const {
-        messageIds,
-        userInput = null,
-        status,
-        startedAt
-      } = generationData;
+      const result = this.db
+        .prepare(`INSERT INTO generations (${columns}) VALUES (${placeholders}) RETURNING *`)
+        .get(...values);
 
-      const messageIdsJson = JSON.stringify(messageIds);
+      if (!result) return null;
 
-      const result = this.db.prepare(`
-        INSERT INTO generations (
-          id, status, message_ids_json, user_input, started_at
-        )
-        VALUES (?, ?, ?, ?, ?)
-      `).run(
-        id,
-        status,
-        messageIdsJson,
-        userInput,
-        startedAt
-      );
-
-      return result.changes > 0 ? this.findById(id) : null;
-    } catch (error) {
-      throw new Error(`Failed to create generation: ${error.message}`);
+      return {
+        ...result,
+        message_ids_json: result.message_ids_json ? JSON.parse(result.message_ids_json) : []
+      };
+    } catch (err) {
+      throw new Error('Failed to create generation', { cause: err });
     }
   }
 
@@ -192,46 +151,73 @@ class GenerationRepository {
   }
 
   /**
-   * Update a generation with AI output and thinking
+   * Update a generation with flexible field updates
    * @param {string} id - The generation ID
-   * @param {Object} aiData - AI response data
-   * @param {string} [aiData.aiOutput] - AI generated output
-   * @param {string} [aiData.aiThinking] - AI thinking process
-   * @param {string} [aiData.apiResponse] - API response data
-   * @returns {boolean} True if update was successful, false otherwise
+   * @param {GenerationUpdateData} updateData - Data to update
+   * @returns {Object|null} The updated generation object or null if not found
    * @throws {Error} If the database operation fails
    */
-  updateAiData(id, aiData) {
+  update(id, updateData) {
+    if (!updateData || Object.keys(updateData).length === 0) return null; // nothing to update
+
+    const now = convertToISO();
+    const updates = {};
+
+    for (const [key, value] of Object.entries(updateData)) {
+      if (!fieldMapping[key]) continue;
+      updates[fieldMapping[key]] = key === 'messageIds' ? JSON.stringify(value) : value;
+    }
+
+    if (Object.keys(updates).length === 0) return null;
+
+    updates.updated_at = now;
+
+    const setClause = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+    const values = Object.values(updates);
+
+    try {
+      const result = this.db
+      .prepare(`UPDATE generations SET ${setClause} WHERE id = ? RETURNING *`)
+      .get(...values, id);
+
+
+      if (!result) return null;
+
+
+      return {
+        ...result,
+        messageIds: result.message_ids_json ? JSON.parse(result.message_ids_json) : []
+      };
+    } catch (err) {
+      throw new Error('Failed to update generation', { cause: err });
+    }
+  }
+
+  /**
+   * Cancel a generation
+   * @param {string} id - The generation ID
+   * @param {string} reason - Reason for cancellation
+   * @returns {boolean} True if cancellation was successful, false otherwise
+   * @throws {Error} If the database operation fails
+   */
+  cancel(id, reason) {
     try {
       const now = convertToISO();
-      const {
-        aiOutput = null,
-        aiThinking = null,
-        finishedAt = new Date().toISOString(),
-        apiProvider = null,
-        apiRequest = null,
-        apiResponse = null
-      } = aiData;
-
       const result = this.db.prepare(`
-        UPDATE generations 
-        SET ai_output = ?, ai_thinking = ?, finished_at = ?, 
-        api_provider = ?, api_request = ?, api_response = ?, updated_at = ?
+        UPDATE generations
+        SET status = ?, finished_at = ?, updated_at = ?, reasons = ?
         WHERE id = ?
       `).run(
-        aiOutput,
-        aiThinking,
-        finishedAt,
-        apiProvider,
-        apiRequest,
-        apiResponse,
+        GENERATION_STATUS.CANCELED,
         now,
+        now,
+        reason,
         id
       );
 
       return result.changes > 0;
     } catch (error) {
-      throw new Error(`Failed to update generation AI data: ${error.message}`);
+      throw new Error(`Failed to cancel generation: ${error.message}`);
     }
   }
 
@@ -248,7 +234,7 @@ class GenerationRepository {
       
       const result = this.db.prepare(`
         UPDATE generations 
-        SET error = ?, status = ?, finished_at = ?, updated_at = ?
+        SET reasons = ?, status = ?, finished_at = ?, updated_at = ?
         WHERE id = ?
       `).run(
         error,
@@ -271,179 +257,84 @@ class GenerationRepository {
    * @throws {Error} If the database operation fails
    */
   delete(id) {
+    if (!id) return false;
+
     try {
       const result = this.db.prepare('DELETE FROM generations WHERE id = ?').run(id);
       return result.changes > 0;
-    } catch (error) {
-      throw new Error(`Failed to delete generation: ${error.message}`);
+    } catch (err) {
+      throw new Error('Failed to delete generation', { cause: err });
     }
   }
 
   /**
-   * Get total count of generations
-   * @returns {number} The total count of generations
-   * @throws {Error} If the database operation fails
-   */
-  count() {
-    try {
-      const result = this.db.prepare('SELECT COUNT(*) as count FROM generations').get();
-      return result.count;
-    } catch (error) {
-      throw new Error(`Failed to count generations: ${error.message}`);
-    }
-  }
-
-  /**
-   * Get count of generations by status
-   * @param {string} status - The generation status
-   * @returns {number} The count of generations with the specified status
-   * @throws {Error} If the database operation fails
-   */
-  countByStatus(status) {
-    try {
-      const result = this.db.prepare('SELECT COUNT(*) as count FROM generations WHERE status = ?').get(status);
-      return result.count;
-    } catch (error) {
-      throw new Error(`Failed to count generations by status: ${error.message}`);
-    }
-  }
-
-  /**
-   * Find all generations with pagination
-   * @param {number} [limit=50] - Maximum number of generations to return
-   * @param {number} [offset=0] - Number of generations to skip
+   * Find generations with flexible conditions
+   * @param {Object} [conditions] - Search conditions using camelCase
+   * @param {string} [conditions.status] - Filter by status
+   * @param {string} [conditions.userInput] - Filter by user input (partial match)
+   * @param {string} [conditions.apiProvider] - Filter by API provider
+   * @param {string} [conditions.reasons] - Filter by reasons (partial match)
+   * @param {Object} [options] - Query options
+   * @param {number} [options.limit] - Limit number of results
+   * @param {number} [options.offset] - Offset for pagination
+   * @param {string} [options.orderBy] - Field to order by (camelCase)
+   * @param {string} [options.orderDir] - Order direction ('asc' or 'desc')
    * @returns {Array<Object>} Array of generation objects
    * @throws {Error} If the database operation fails
    */
-  findAll(limit = 50, offset = 0) {
+  find(conditions = {}, options = {}) {
     try {
-      const generations = this.db.prepare(`
-        SELECT * FROM generations 
-        ORDER BY created_at DESC 
-        LIMIT ? OFFSET ?
-      `).all(limit, offset);
+      let query = 'SELECT * FROM generations';
+      const whereConditions = [];
+      const values = [];
+
+      // Build WHERE conditions
+      for (const [key, value] of Object.entries(conditions)) {
+        if (value === undefined || value === null) continue;
+        
+        const dbColumn = fieldMapping[key] || key;
+        
+        // String fields use LIKE for partial matching
+        if (['user_input', 'reasons'].includes(dbColumn)) {
+          whereConditions.push(`${dbColumn} LIKE ?`);
+          values.push(`%${value}%`);
+        } else {
+          whereConditions.push(`${dbColumn} = ?`);
+          values.push(value);
+        }
+      }
+
+      if (whereConditions.length > 0) {
+        query += ' WHERE ' + whereConditions.join(' AND ');
+      }
+
+      // Add ORDER BY
+      const orderBy = options.orderBy ? (fieldMapping[options.orderBy] || options.orderBy) : 'created_at';
+      const orderDir = options.orderDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      query += ` ORDER BY ${orderBy} ${orderDir}`;
+
+      // Add LIMIT and OFFSET
+      if (options.limit) {
+        query += ' LIMIT ?';
+        values.push(options.limit);
+      }
+
+      if (options.offset) {
+        query += ' OFFSET ?';
+        values.push(options.offset);
+      }
+
+      const results = this.db.prepare(query).all(...values);
       
-      // Parse JSON fields for each generation
-      return generations.map(generation => ({
-        ...generation,
-        message_ids_json: JSON.parse(generation.message_ids_json)
+      return results.map(result => ({
+        ...result,
+        message_ids_json: result.message_ids_json ? JSON.parse(result.message_ids_json) : []
       }));
-    } catch (error) {
-      throw new Error(`Failed to find all generations: ${error.message}`);
+    } catch (err) {
+      throw new Error('Failed to find generations', { cause: err });
     }
   }
 
-  /**
-   * Find pending generations (for processing queue)
-   * @param {number} [limit=10] - Maximum number of pending generations to return
-   * @returns {Array<Object>} Array of pending generation objects
-   * @throws {Error} If the database operation fails
-   */
-  findPending(limit = 10) {
-    try {
-      const generations = this.db.prepare(`
-        SELECT * FROM generations 
-        WHERE status = ? 
-        ORDER BY created_at ASC 
-        LIMIT ?
-      `).all(GENERATION_STATUS.PENDING, limit);
-      
-      // Parse JSON fields for each generation
-      return generations.map(generation => ({
-        ...generation,
-        message_ids_json: JSON.parse(generation.message_ids_json)
-      }));
-    } catch (error) {
-      throw new Error(`Failed to find pending generations: ${error.message}`);
-    }
-  }
-
-  /**
-   * Find processing generations (currently being processed)
-   * @returns {Array<Object>} Array of processing generation objects
-   * @throws {Error} If the database operation fails
-   */
-  findProcessing() {
-    try {
-      const generations = this.db.prepare(`
-        SELECT * FROM generations 
-        WHERE status = ? 
-        ORDER BY started_at ASC
-      `).all(GENERATION_STATUS.PROCESSING);
-      
-      // Parse JSON fields for each generation
-      return generations.map(generation => ({
-        ...generation,
-        message_ids_json: JSON.parse(generation.message_ids_json)
-      }));
-    } catch (error) {
-      throw new Error(`Failed to find processing generations: ${error.message}`);
-    }
-  }
-
-  /**
-   * Cancel a generation (set status to CANCELED)
-   * @param {string} id - The generation ID
-   * @returns {boolean} True if cancellation was successful, false otherwise
-   * @throws {Error} If the database operation fails
-   */
-  cancel(id) {
-    try {
-      return this.updateStatus(id, GENERATION_STATUS.CANCELED);
-    } catch (error) {
-      throw new Error(`Failed to cancel generation: ${error.message}`);
-    }
-  }
-
-  /**
-   * Mark generation as processing
-   * @param {string} id - The generation ID
-   * @returns {boolean} True if update was successful, false otherwise
-   * @throws {Error} If the database operation fails
-   */
-  markAsProcessing(id) {
-    try {
-      return this.updateStatus(id, GENERATION_STATUS.PROCESSING);
-    } catch (error) {
-      throw new Error(`Failed to mark generation as processing: ${error.message}`);
-    }
-  }
-
-  /**
-   * Mark generation as successful
-   * @param {string} id - The generation ID
-   * @returns {boolean} True if update was successful, false otherwise
-   * @throws {Error} If the database operation fails
-   */
-  markAsSuccess(id) {
-    try {
-      return this.updateStatus(id, GENERATION_STATUS.SUCCESS);
-    } catch (error) {
-      throw new Error(`Failed to mark generation as success: ${error.message}`);
-    }
-  }
-
-  /**
-   * Get generation statistics
-   * @returns {Object} Statistics object with counts by status
-   * @throws {Error} If the database operation fails
-   */
-  getStatistics() {
-    try {
-      const stats = {};
-      
-      // Get counts for each status
-      Object.values(GENERATION_STATUS).forEach(status => {
-        stats[status.toLowerCase()] = this.countByStatus(status);
-      });
-      
-      stats.total = this.count();
-      
-      return stats;
-    } catch (error) {
-      throw new Error(`Failed to get generation statistics: ${error.message}`);
-    }
-  }
 }
 
 // Create singleton instance

@@ -22,18 +22,15 @@ export const createGenerationsTable = (db) => {
       user_input TEXT,
       ai_output TEXT,
       ai_thinking TEXT,
-      error TEXT,
+      reasons TEXT,
 
       started_at TEXT NOT NULL,
       finished_at TEXT,
 
-      api_provider TEXT,
       api_request TEXT,
       api_response TEXT,
 
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      canceled_at TEXT,
-      reason TEXT,
       updated_at TEXT
     )
   `).run(); 
