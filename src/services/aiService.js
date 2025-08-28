@@ -16,7 +16,6 @@ export class AIService {
       switch (provider) {
         case 'GEMINI': {
           const prompt = await buildGeminiPrompt(userId, userInput, timestamp, channelId);
-          console.log('Gemini Prompt built:', prompt);
           
           // API 요청 정보 저장
           apiRequest = {
