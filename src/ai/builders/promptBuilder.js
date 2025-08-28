@@ -84,8 +84,8 @@ export async function buildGeminiPrompt(userId, userInput, timestamp, channelId)
     const content = (msg?.content ?? '').toString().trim();
     if (!content) continue; // ignore empty
 
-    // Decide speaker role
-    const role = msg.author_id === userId ? 'user' : 'model';
+    // Decide speaker role: if authorId matches bot's DISCORD_CLIENT_ID, it's model, otherwise user
+    const role = msg.authorId === process.env.DISCORD_CLIENT_ID ? 'model' : 'user';
 
     // If same speaker as the current turn, append; else start a new turn
     if (currentTurn && currentTurn.role === role) {
