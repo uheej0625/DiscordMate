@@ -1,4 +1,10 @@
 import fs from 'fs';
+import path from 'path';
+
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const PROMPT_CATEGORY = {
   SYSTEM: 'system',
@@ -13,7 +19,7 @@ export const PROMPT_CATEGORY = {
  * @returns {string} Prompt string with variables replaced
  */
 export function templateRenderer(category, type, variables = {}) {
-  const promptsPath = path.join(__dirname, '..', 'prompts');
+  const promptsPath = path.join(__dirname, '../', 'ai/prompts');
 
   const filePath = path.join(promptsPath, category, `${type}.md`);
 

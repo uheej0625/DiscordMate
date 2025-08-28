@@ -30,14 +30,14 @@ export async function buildPrompt(userId, userInput, timestamp, channelId) {
 
   promptArray.push({
     role: 'user',
-    parts: [{ text: templateRenderer(PROMPT_CATEGORY.SYSTEM, variables) }]
+    parts: [{ text: templateRenderer(config.ai.prompt, PROMPT_CATEGORY.SYSTEM, variables) }]
   });
 
   promptArray.push(...(await contextBuilder(channelId)));
 
   promptArray.push({
     role: 'user',
-    parts: [{ text: templateRenderer(PROMPT_CATEGORY.USERINPUT, variables) }]
+    parts: [{ text: templateRenderer(config.ai.prompt, PROMPT_CATEGORY.USERINPUT, variables) }]
   });
 
   return promptArray;

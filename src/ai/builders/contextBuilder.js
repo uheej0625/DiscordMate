@@ -27,7 +27,7 @@ export default async function contextBuilder(channelId) {
     const content = (msg?.content ?? '').toString().trim();
     if (!content) continue;
 
-    const role = msg.authorId === botId ? 'model' : 'user';
+    const role = msg.authorId === process.env.DISCORD_CLIENT_ID ? 'model' : 'user';
 
     if (currentTurn && currentTurn.role === role) {
       currentTurn.parts.push({ text: content });
