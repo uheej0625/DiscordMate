@@ -1,6 +1,7 @@
 import { callGeminiAPI } from '../ai/providers/gemini.js';
 import { buildGeminiPrompt } from '../ai/builders/promptBuilder.js';
 import { parseModelJson } from '../utils/json.js';
+import registry from '../ai/functions/registry.js';
 
 export class AIService {
   /**
@@ -35,6 +36,17 @@ export class AIService {
       }
 
       const parts = response?.candidates?.[0]?.content?.parts ?? [];
+
+      const functionCall = parts.find(p => p.functionCall)?.functionCall;
+      let functionResult;
+      if (functionCall) {
+        try {
+          functionResult = await registry.execute(functionCall);
+        } catch (err) {
+          console.error('Function execution error:', err);
+        }
+      }
+
       const responseText = parts
         .map(p => p.text ?? '')
         .join('\n')
@@ -51,6 +63,7 @@ export class AIService {
       return {
         messages: obj.messages,
         thinking: obj.thinking,
+        functionResult,
         apiRequest,
         apiResponse
       };
@@ -61,3 +74,4 @@ export class AIService {
   }
 }
 export default new AIService();
+

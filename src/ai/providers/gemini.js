@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { geminiConfig } from '../../config/gemini.js';
+import registry from '../functions/registry.js';
 
 const ai = new GoogleGenAI({ apiKey: geminiConfig.apiKey });
 
@@ -8,6 +9,7 @@ export async function callGeminiAPI(contents) {
     const response = await ai.models.generateContent({
       model: geminiConfig.model,
       contents: contents,
+      tools: [{ functionDeclarations: registry.listDeclarations() }]
     });
     
     return response;
