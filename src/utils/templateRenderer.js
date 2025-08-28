@@ -1,0 +1,26 @@
+import fs from 'fs';
+
+export const PROMPT_CATEGORY = {
+  SYSTEM: 'system',
+  USERINPUT: 'userInput'
+};
+
+/**
+ * Loads a prompt file and replaces variables, returning it as a string.
+ * @param {string} category - Prompt name (e.g., "basic", "test")
+ * @param {string} type - Prompt type (e.g., "system", "userInput")
+ * @param {Object} variables - Variables to replace
+ * @returns {string} Prompt string with variables replaced
+ */
+export function templateRenderer(category, type, variables = {}) {
+  const promptsPath = path.join(__dirname, '..', 'prompts');
+
+  const filePath = path.join(promptsPath, category, `${type}.md`);
+
+  const template = fs.readFileSync(filePath, 'utf-8');
+  
+  return template.replace(/{{([^}]+)}}/g, (match, key) => {
+    const value = key.split('.').reduce((obj, k) => obj?.[k], variables);
+    return value !== undefined ? value : match;
+  });
+}

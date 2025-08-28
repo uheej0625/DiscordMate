@@ -1,5 +1,5 @@
 import { callGeminiAPI } from '../ai/providers/gemini.js';
-import { buildGeminiPrompt } from '../ai/builders/promptBuilder.js';
+import { buildPrompt } from '../ai/builders/promptBuilder.js';
 import { parseModelJson } from '../utils/json.js';
 import registry from '../ai/functions/registry.js';
 
@@ -15,7 +15,7 @@ export class AIService {
 
       switch (provider) {
         case 'GEMINI': {
-          const prompt = await buildGeminiPrompt(userId, userInput, timestamp, channelId);
+          const prompt = await buildPrompt(userId, userInput, timestamp, channelId);
           
           // API 요청 정보 저장
           apiRequest = {
