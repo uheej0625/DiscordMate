@@ -20,11 +20,16 @@ export class AIService {
           // API 요청 정보 저장
           apiRequest = {
             model: 'gemini-2.5-flash-preview-05-20',
-            contents: prompt
+            contents: prompt,
+            config: {
+              // tools: [{
+              //   functionDeclarations: [weatherFunctionDeclaration]
+              // }],
+            },
           };
-          
-          response = await callGeminiAPI(prompt);
-          
+
+          response = await callGeminiAPI(apiRequest);
+
           // API 응답 정보 저장
           apiResponse = response;
           

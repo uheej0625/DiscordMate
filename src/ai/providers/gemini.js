@@ -19,17 +19,9 @@ const weatherFunctionDeclaration = {
   },
 };
 
-export async function callGeminiAPI(contents) {
+export async function callGeminiAPI(payload) {
   try {
-    const response = await ai.models.generateContent({
-      model: geminiConfig.model,
-      contents: contents,
-      config: {
-        tools: [{
-          functionDeclarations: [weatherFunctionDeclaration]
-        }],
-      },
-    });
+    const response = await ai.models.generateContent(payload);
     
     // Check for function calls in the response
     if (response.functionCalls && response.functionCalls.length > 0) {
