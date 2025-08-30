@@ -3,7 +3,6 @@ import messageService from '../services/messageService.js';
 import chattingService from '../services/chattingService.js';
 import generationRepository from '../repositories/generationRepository.js';
 import { getMessageDelay } from '../utils/messageDelay.js';
-import voiceService from '../services/voiceService.js';
 import { GENERATION_STATUS } from '../database/schemas/generations.js';
 
 const TIMEOUT_MS = 5000;
@@ -22,18 +21,10 @@ export default async function handleMessage(message) {
   // 1) 디스코드 원문 그대로 저장
   await messageService.create(message);
 
-  // 2) 음성채널 상태 확인 (선택사항 - 로깅 목적)
-  if (message.guild) {
-    const voiceStatus = voiceService.checkVoiceStatus(message);
-    if (voiceStatus.valid && voiceStatus.inSameChannel) {
-      console.log(`🎙️ ${message.author.username}님과 봇이 같은 음성채널에 있습니다: ${voiceStatus.channels.userChannel?.name}`);
-    }
-  }
-
-  // 3) 기존 배치 취소 (새 입력으로 교체)
+  // 2) 기존 배치 취소 (새 입력으로 교체)
   chattingService.cancelActive(channelId, userId, 'new-input');
 
-  // 4) 5초 디바운스
+  // 3) 5초 디바운스
   if (timers.get(key)?.timer) clearTimeout(timers.get(key).timer);
   timers.set(key, {
     lastMessage: message,
