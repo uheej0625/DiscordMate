@@ -14,13 +14,13 @@ export function parseModelJson(raw) {
   // 3) 1차 JSON.parse
   try {
     return JSON.parse(payload);
-  } catch {
+  } catch(error) {
     const idx = payload.indexOf('{');
     const jdx = payload.lastIndexOf('}');
     if (idx !== -1 && jdx !== -1 && jdx > idx) {
       const guess = payload.slice(idx, jdx + 1);
       return JSON.parse(guess);
     }
-    throw new Error('JSON 파싱 실패');
+    throw new Error('JSON 파싱 실패', { cause: error });
   }
 }
