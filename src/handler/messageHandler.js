@@ -56,8 +56,8 @@ async function runBatch(key) {
   const outs = Array.isArray(gen.aiOutput) ? gen.aiOutput : String(gen.aiOutput ?? '').split('\n').map(s => s.trim()).filter(Boolean);
 
   // 기존 messageIds에 새로운 sent.id들을 누적해서 추가
-  // gen.message_ids_json은 DB에서 파싱된 배열
-  const existingMessageIds = gen.message_ids_json || [];
+  // gen.messageIds는 DB에서 파싱된 배열
+  const existingMessageIds = gen.messageIds || [];
   const newMessageIds = [];
 
   for (const text of outs) {

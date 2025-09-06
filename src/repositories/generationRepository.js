@@ -35,6 +35,32 @@ const fieldMapping = {
 };
 
 /**
+ * Convert database result from snake_case to camelCase
+ * @param {Object} dbResult - Database result object
+ * @returns {Object} Converted object with camelCase keys
+ */
+function toCamelCase(obj) {
+  if (!obj) return null;
+  
+  const result = {};
+  for (const [key, value] of Object.entries(obj)) {
+    // Convert snake_case to camelCase
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    
+    // Special handling for JSON fields
+    if (key.includes('_json')) {
+      result[camelKey.replace('Json', 'Ids')] = value ? JSON.parse(value) : [];
+    } else if (key === 'api_request' || key === 'api_response') {
+      result[camelKey] = value ? JSON.parse(value) : null;
+    } else {
+      result[camelKey] = value;
+    }
+  }
+  
+  return result;
+}
+
+/**
  * Generation Repository Class
  * Handles all database operations related to AI generations
  * @class GenerationRepository
@@ -62,10 +88,7 @@ class GenerationRepository {
       
       if (!result) return null;
 
-      return {
-        ...result,
-        message_ids_json: result.message_ids_json ? JSON.parse(result.message_ids_json) : []
-      };
+      return toCamelCase(result);
     } catch (err) {
       throw new Error('Failed to find generation by ID', { cause: err });
     }
@@ -109,10 +132,7 @@ class GenerationRepository {
 
       if (!result) return null;
 
-      return {
-        ...result,
-        message_ids_json: result.message_ids_json ? JSON.parse(result.message_ids_json) : []
-      };
+      return toCamelCase(result);
     } catch (err) {
       throw new Error('Failed to create generation', { cause: err });
     }
@@ -188,11 +208,7 @@ class GenerationRepository {
 
       if (!result) return null;
 
-
-      return {
-        ...result,
-        messageIds: result.message_ids_json ? JSON.parse(result.message_ids_json) : []
-      };
+      return toCamelCase(result);
     } catch (err) {
       throw new Error('Failed to update generation', { cause: err });
     }
@@ -331,10 +347,7 @@ class GenerationRepository {
 
       const results = this.db.prepare(query).all(...values);
       
-      return results.map(result => ({
-        ...result,
-        message_ids_json: result.message_ids_json ? JSON.parse(result.message_ids_json) : []
-      }));
+      return results.map(result => toCamelCase(result));
     } catch (err) {
       throw new Error('Failed to find generations', { cause: err });
     }
