@@ -53,7 +53,7 @@ async function runBatch(key) {
   if (!gen || gen.status !== GENERATION_STATUS.SUCCESS) return;
 
   // 문자열이든 배열이든 최소 지원
-  const outs = Array.isArray(gen.ai_output) ? gen.ai_output : String(gen.ai_output ?? '').split('\n').map(s => s.trim()).filter(Boolean);
+  const outs = Array.isArray(gen.aiOutput) ? gen.aiOutput : String(gen.aiOutput ?? '').split('\n').map(s => s.trim()).filter(Boolean);
 
   // 기존 messageIds에 새로운 sent.id들을 누적해서 추가
   // gen.message_ids_json은 DB에서 파싱된 배열
