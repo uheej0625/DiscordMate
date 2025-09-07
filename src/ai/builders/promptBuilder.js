@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 
 import contextBuilder from './contextBuilder.js';
 import templateRenderer from '../../utils/templateRenderer.js';
+import voiceService from '../../services/voiceService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +19,10 @@ const __dirname = path.dirname(__filename);
 export async function buildTextPrompt(userId, userInput, timestamp, channelId) {
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../..', 'config.json'), 'utf-8'));
 
+  console.log('Voice channel for user:', voiceService.getSameVoiceChannel(userId));
+
+  const promptSet = voiceService.getSameVoiceChannel(userId) ? 'voice' : config.ai.prompt;
+
   const variables = {
     char: config.reference.char,
     user: config.reference.user,
@@ -30,14 +35,14 @@ export async function buildTextPrompt(userId, userInput, timestamp, channelId) {
 
   promptArray.push({
     role: 'user',
-    parts: [{ text: templateRenderer(config.ai.prompt, 'system', variables) }]
+    parts: [{ text: templateRenderer(promptSet, 'system', variables) }]
   });
 
   promptArray.push(...(await contextBuilder(channelId)));
 
   promptArray.push({
     role: 'user',
-    parts: [{ text: templateRenderer(config.ai.prompt, 'userInput', variables) }]
+    parts: [{ text: templateRenderer(promptSet, 'userInput', variables) }]
   });
 
   return promptArray;

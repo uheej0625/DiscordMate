@@ -1,5 +1,5 @@
 import { ApplicationCommandType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
-import messageRepository from '../../repositories/messageRepository.js';
+import generationRepository from '../../repositories/generationRepository.js';
 
 export default {
   data: {
@@ -24,7 +24,7 @@ export default {
       }
 
       // DB에서 메시지 찾기
-      const messageData = await messageRepository.findByMessageId(targetMessage.id);
+      const messageData = await generationRepository.findByMessageId(targetMessage.id);
       
       if (!messageData) {
         return await interaction.reply({
@@ -34,7 +34,7 @@ export default {
       }
 
       // 추론 내역이 없는 경우
-      if (!messageData.thinking) {
+      if (!messageData.aiThinking) {
         return await interaction.reply({
           content: '❌ 이 메시지에 대한 추론 내역이 없습니다.',
           flags: MessageFlags.Ephemeral
@@ -44,9 +44,9 @@ export default {
       // 추론 내역 임베드 생성
       const embed = new EmbedBuilder()
         .setTitle('🤔 AI 추론 과정')
-        .setDescription(messageData.thinking)
+        .setDescription(messageData.aiThinking)
         .setColor(0x5865F2)
-        .setTimestamp(new Date(messageData.message_timestamp))
+        .setTimestamp(new Date(messageData.createdAt))
         .setFooter({ 
           text: `메시지 ID: ${targetMessage.id}`,
           iconURL: interaction.client.user.displayAvatarURL()

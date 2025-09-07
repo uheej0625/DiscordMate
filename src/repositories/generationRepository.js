@@ -289,6 +289,30 @@ class GenerationRepository {
   }
 
   /**
+   * Find a generation that contains the given message ID in its message_ids_json array
+   * @param {string} messageId - The message ID to search for
+   * @returns {Object|null} The generation object or null if not found
+   * @throws {Error} If the database operation fails
+   */
+  findByMessageId(messageId) {
+    if (!messageId) return null;
+
+    try {
+      // Use JSON_EXTRACT to check if messageId exists in the message_ids_json array
+      const result = this.db.prepare(`
+        SELECT * FROM generations 
+        WHERE json_extract(message_ids_json, '$') LIKE ?
+      `).get(`%"${messageId}"%`);
+      
+      if (!result) return null;
+
+      return toCamelCase(result);
+    } catch (err) {
+      throw new Error('Failed to find generation by message ID', { cause: err });
+    }
+  }
+
+  /**
    * Find generations with flexible conditions
    * @param {Object} [conditions] - Search conditions using camelCase
    * @param {string} [conditions.status] - Filter by status

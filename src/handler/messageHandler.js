@@ -1,4 +1,6 @@
-// handlers/handleMessage.js
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import messageService from '../services/messageService.js';
 import userRepository from '../repositories/userRepository.js';
 import chattingService from '../services/chattingService.js';
@@ -7,6 +9,10 @@ import generationRepository from '../repositories/generationRepository.js';
 import { getMessageDelay } from '../utils/messageDelay.js';
 import { GENERATION_STATUS } from '../database/schemas/generations.js';
 import aiService from '../services/aiService.js';
+import { VoiceChannel } from 'discord.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const TIMEOUT_MS = 5000;
 const timers = new Map(); // key = `${userId}:${channelId}` -> { timer, lastMessage }
@@ -63,9 +69,9 @@ async function runBatch(key) {
   const existingMessageIds = gen.messageIds || [];
   const newMessageIds = [];
 
-  const isVoiceMode = await voiceService.isVoiceMode(msg);
+  const sameVoiceChannel = await voiceService.getSameVoiceChannel(userId);
   
-  if (isVoiceMode) {
+  if (sameVoiceChannel) {
     for (const text of outs) {
       const cleanedText = text.replace(/\([^)]*\)/g, '').trim(); // 지시문이 컨텍스트를 오염시키는 것을 방지
       const sent = makeDummyMessage(cleanedText, channelId);
@@ -73,7 +79,7 @@ async function runBatch(key) {
       newMessageIds.push(sent.id);
     }
 
-    await voiceMode(outs.join('\n'), msg.channel.id);
+    await voiceMode(outs.join('\n'), sameVoiceChannel);
   } else {
     for (const text of outs) {
       await msg.channel.sendTyping();
@@ -92,8 +98,27 @@ async function runBatch(key) {
   }
 }
 
-async function voiceMode(text, channelId) {
-  aiService.generateTTS('GEMINI', text);
+async function voiceMode(text, voiceChannel) {
+  console.log("Voice mode activated");
+
+  try {
+    // TTS 음성 파일 생성
+    await aiService.generateTTS('GEMINI', text);
+
+    // 생성된 TTS 파일의 절대 경로
+    const audioFilePath = path.join(process.cwd(), 'out.wav');
+    
+    // 생성된 TTS 파일 재생
+    const success = await voiceService.play(voiceChannel, audioFilePath);
+
+    if (success) {
+      console.log('TTS 음성 재생 완료');
+    } else {
+      console.error('TTS 음성 재생 실패');
+    }
+  } catch (error) {
+    console.error('voiceMode 실행 중 오류:', error);
+  }
 }
 
 function makeDummyMessage(text, channelId) {
