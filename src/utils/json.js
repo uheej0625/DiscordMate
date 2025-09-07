@@ -15,12 +15,22 @@ export function parseModelJson(raw) {
   try {
     return JSON.parse(payload);
   } catch(error) {
+    // JSON 객체 형태가 있는지 확인
     const idx = payload.indexOf('{');
     const jdx = payload.lastIndexOf('}');
     if (idx !== -1 && jdx !== -1 && jdx > idx) {
-      const guess = payload.slice(idx, jdx + 1);
-      return JSON.parse(guess);
+      try {
+        const guess = payload.slice(idx, jdx + 1);
+        return JSON.parse(guess);
+      } catch(nestedError) {
+        // JSON 객체 추출도 실패한 경우
+      }
     }
-    throw new Error('JSON 파싱 실패', { cause: error });
+    
+    // JSON 파싱이 완전히 실패한 경우, 일반 텍스트로 간주하고 기본 형태로 반환
+    console.warn('JSON 파싱 실패, 일반 텍스트로 처리:', payload.substring(0, 100) + '...');
+    return {
+      messages: [payload]
+    };
   }
 }

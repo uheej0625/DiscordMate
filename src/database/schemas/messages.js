@@ -6,7 +6,7 @@ export const createMessagesTable = (db) => {
   db.prepare(`
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
-      message_id TEXT UNIQUE NOT NULL,
+      message_id TEXT UNIQUE,
       conversation_id TEXT,
 
       guild_id TEXT,

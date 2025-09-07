@@ -1,6 +1,7 @@
 import { callGeminiAPI } from '../ai/providers/gemini.js';
-import { buildPrompt } from '../ai/builders/promptBuilder.js';
+import { buildTextPrompt, buildVoicePrompt } from '../ai/builders/promptBuilder.js';
 import { parseModelJson } from '../utils/json.js';
+import saveWaveFile from '../utils/saveWaveFile.js';
 import registry from '../ai/functions/registry.js';
 
 export class AIService {
@@ -15,7 +16,7 @@ export class AIService {
 
       switch (provider) {
         case 'GEMINI': {
-          const prompt = await buildPrompt(userId, userInput, timestamp, channelId);
+          const prompt = await buildTextPrompt(userId, userInput, timestamp, channelId);
           
           // API 요청 정보 저장
           apiRequest = {
@@ -73,6 +74,50 @@ export class AIService {
       };
     } catch (error) {
       console.error('Generate Response Error:', error);
+      throw error;
+    }
+  }
+
+  async generateTTS(provider, text) {
+    try {
+      let response;
+      let apiRequest;
+      let apiResponse;
+
+      switch (provider) {
+        case 'GEMINI': {
+          const prompt = await buildVoicePrompt(text);
+
+          // API 요청 정보 저장
+          apiRequest = {
+            model: "gemini-2.5-flash-preview-tts",
+            contents: prompt,
+            config: {
+              responseModalities: ['AUDIO'],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName: 'Leda' },
+                },
+              },
+            },
+          };
+
+          response = await callGeminiAPI(apiRequest);
+
+          // API 응답 정보 저장
+          apiResponse = response;
+          
+          const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+          const audioBuffer = Buffer.from(data, 'base64');
+
+          const fileName = 'out.wav';
+          await saveWaveFile(fileName, audioBuffer);
+
+          break;
+        }
+      }
+    } catch (error) {
+      console.error('Generate TTS Error:', error);
       throw error;
     }
   }

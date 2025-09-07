@@ -1,9 +1,12 @@
 // handlers/handleMessage.js
 import messageService from '../services/messageService.js';
+import userRepository from '../repositories/userRepository.js';
 import chattingService from '../services/chattingService.js';
+import voiceService from '../services/voiceService.js';
 import generationRepository from '../repositories/generationRepository.js';
 import { getMessageDelay } from '../utils/messageDelay.js';
 import { GENERATION_STATUS } from '../database/schemas/generations.js';
+import aiService from '../services/aiService.js';
 
 const TIMEOUT_MS = 5000;
 const timers = new Map(); // key = `${userId}:${channelId}` -> { timer, lastMessage }
@@ -60,21 +63,54 @@ async function runBatch(key) {
   const existingMessageIds = gen.messageIds || [];
   const newMessageIds = [];
 
-  for (const text of outs) {
-    await msg.channel.sendTyping();
-    await sleep(getMessageDelay(text));
-    const sent = await msg.channel.send(text);
-    // 봇이 보낸 것도 저장(필요 최소)
-    await messageService.create(sent);
-    // 새로운 메시지 ID 수집
-    newMessageIds.push(sent.id);
+  const isVoiceMode = await voiceService.isVoiceMode(msg);
+  
+  if (isVoiceMode) {
+    for (const text of outs) {
+      const cleanedText = text.replace(/\([^)]*\)/g, '').trim(); // 지시문이 컨텍스트를 오염시키는 것을 방지
+      const sent = makeDummyMessage(cleanedText, channelId);
+      await messageService.create(sent);
+      newMessageIds.push(sent.id);
+    }
+
+    await voiceMode(outs.join('\n'), msg.channel.id);
+  } else {
+    for (const text of outs) {
+      await msg.channel.sendTyping();
+      await sleep(getMessageDelay(text));
+      const sent = await msg.channel.send(text);
+      // 봇이 보낸 것도 저장(필요 최소)
+      await messageService.create(sent);
+      // 새로운 메시지 ID 수집
+      newMessageIds.push(sent.id);
+    }
   }
 
-  // 모든 메시지 전송 후 한 번에 업데이트
   if (newMessageIds.length > 0) {
     const updatedMessageIds = [...existingMessageIds, ...newMessageIds];
     generationRepository.update(genId, { messageIds: updatedMessageIds });
   }
+}
+
+async function voiceMode(text, channelId) {
+  aiService.generateTTS('GEMINI', text);
+}
+
+function makeDummyMessage(text, channelId) {
+  const bot = userRepository.findById(process.env.DISCORD_CLIENT_ID);
+  const message = {
+    id: `dummy-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+    channel: { id: channelId },
+    author: {
+      id: bot.id,
+      username: bot.username,
+      globalName: bot.globalName,
+      bot: true
+    },
+    content: text,
+  };
+
+  return message;
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
