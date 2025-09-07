@@ -1,39 +1,131 @@
-import * as messageRepository from '../repositories/messageRepository.js';
-import * as userRepository from '../repositories/userRepository.js';
-import { MESSAGE_STATUS } from '../database/schemas/messages.js';
-import { USER_ROLE, USER_ACCESS } from '../database/schemas/users.js';
+import messageService from '../services/messageService.js';
+import aiService from '../services/aiService.js';
+import generationRepository from '../repositories/generationRepository.js';
+import convertToISO from '../utils/convertToISO.js';
+import { GENERATION_STATUS } from '../database/schemas/generations.js';
 
-export const chat = async (message, thinking = null, attachments = null, status = MESSAGE_STATUS.PENDING) => {
-  const user = userRepository.getById(message.author.id);
-  if (!user) {
-    let role = message.author.bot == false ? USER_ROLE.USER : USER_ROLE.BOT;
-    await userRepository.create({
-      userId: message.author.id,
-      role,
-      access: USER_ACCESS.DEFAULT,
-      username: message.author.username,
-      globalName: message.author.globalName,
-      preferred_name: null
-    });
+// Active session management: key = `${userId}:${channelId}`
+const activeGenerations = new Map(); // key -> { genId, abortController }
+
+class ChattingService {
+  // Cancel active generation when new user message arrives
+  // Can be called externally or internally before starting new chat
+  cancelActive(channelId, userId, reason = 'superseded-by-new-input') {
+    const key = `${userId}:${channelId}`;
+    const currentGeneration = activeGenerations.get(key);
+    if (!currentGeneration) return;
+
+    // 1) Send abort signal (when possible)
+    try { currentGeneration.abortController?.abort(); } catch {}
+
+    // 2) Set DB status to CANCELED (no-op if already finished)
+    try {
+      generationRepository.update(currentGeneration.genId, {
+        status: GENERATION_STATUS.CANCELED,
+        finishedAt: convertToISO(new Date()),
+        reasons: reason
+      });
+    } catch (error) {
+      // Silently ignore if already SUCCESS/FAILED or other errors
+      console.debug('Failed to cancel generation:', error.message);
+    }
+
+    // 3) Remove active session
+    activeGenerations.delete(key);
   }
 
-  messageRepository.create(
-    {
-      message_id: message.id,
-      conversation_id: null, // Assuming conversation_id is not used here
-      channel_id: message.channel.id,
-      guild_id: message.guild ? message.guild.id : null,
-      author_id: message.author.id,
-      content: message.content,
-      thinking: thinking || null,
-      attachments: null,
-      status,
-      error: null,
-      message_timestamp: message.createdTimestamp
-    }
-  )
-};
+  async chat(channelId, userId) {
+    const key = `${userId}:${channelId}`;
 
-export const updateStatus = async (messageId, status, error = null) => {
-  messageRepository.update(messageId, status, error);
-};
+    // (Optional) Cancel current running batch before starting
+    // UI/business flow might already call this when new input arrives
+    this.cancelActive(channelId, userId, 'pre-start-cancel');
+
+    // 1) Collect unprocessed user messages (generation_id IS NULL)
+    const messages = await messageService.getToProcessMessages(channelId, userId);
+    if (!messages.length) return null;
+
+    // 2) Create generation record (PROCESSING) + save snapshot
+    const generation = await generationRepository.create({
+      messageIds: messages.map(message => message.messageId),
+      userInput: messages.map(message => message.content ?? '').join('\n'),
+      status: GENERATION_STATUS.PROCESSING,
+      startedAt: convertToISO(new Date())
+    }); 
+
+    // 3) Register active session + prepare AbortController
+    const abortController = new AbortController();
+    activeGenerations.set(key, { genId: generation.id, abortController });
+
+    try {
+      // 4) Call AI service
+      const response = await aiService.generateResponse({
+        provider: 'GEMINI',
+        userId,
+        userInput: messages.map(message => message.content ?? '').join('\n'),
+        timestamp: Date.now(),
+        channelId,
+        signal: abortController.signal // ← Cancel support
+      });
+
+      // 5) Discard late/cancelled responses: Am I still active?
+      const currentGeneration = activeGenerations.get(key);
+      if (!currentGeneration || currentGeneration.genId !== generation.id) {
+        // No longer active → Mark as CANCELED (idempotent handling on DB side)
+        await generationRepository.update(generation.id, {
+          status: GENERATION_STATUS.CANCELED,
+          finishedAt: convertToISO(new Date()),
+          reasons: 'stale-response'
+        });
+        return null;
+      }
+
+      // 6) Success commit (atomic recommended: inside transaction)
+      await generationRepository.update(generation.id, {
+        aiOutput: Array.isArray(response.messages) ? response.messages.join('\n') : String(response.messages ?? ''),
+        aiThinking: response.thinking ?? null,
+        finishedAt: convertToISO(new Date()),
+        apiRequest: response.apiRequest ?? null,
+        apiResponse: response.apiResponse ?? null
+      });
+
+      // Link messages to generation (only on success!)
+      await messageService.markProcessedByGeneration(messages.map(message => message.id), generation.id, convertToISO(new Date()));
+
+      await generationRepository.update(generation.id, {
+        status: GENERATION_STATUS.SUCCESS
+      });
+
+      return generation.id;
+
+    } catch (error) {
+      // AbortError or "new batch already active" → CANCELED
+      const isAborted = (error && (error.name === 'AbortError' || error.code === 'ABORT_ERR'));
+      const currentGeneration = activeGenerations.get(key);
+      if (!currentGeneration || currentGeneration.genId !== generation.id || isAborted) {
+        await generationRepository.update(generation.id, {
+          status: GENERATION_STATUS.CANCELED,
+          finishedAt: convertToISO(new Date()),
+          reasons: isAborted ? 'abort-signal' : 'replaced-during-error'
+        });
+      } else {
+        // Real failure
+        await generationRepository.update(generation.id, {
+          status: GENERATION_STATUS.FAILED,
+          finishedAt: convertToISO(new Date()),
+          reasons: String(error?.message ?? error)
+        });
+      }
+      return null;
+
+    } finally {
+      // Release if still active
+      const currentGeneration = activeGenerations.get(key);
+      if (currentGeneration && currentGeneration.genId === generation.id) {
+        activeGenerations.delete(key);
+      }
+    }
+  }
+}
+
+export default new ChattingService();

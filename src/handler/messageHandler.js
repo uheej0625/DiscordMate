@@ -1,123 +1,141 @@
-//import { getMessageResponse } from '../ai/index.js';
-import { aiService } from '../services/aiService.js';
-import { logService } from '../services/logService.js';
-import * as chattingService from '../services/chattingService.js';
-import { MESSAGE_STATUS } from '../database/schemas/messages.js';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import messageService from '../services/messageService.js';
+import userRepository from '../repositories/userRepository.js';
+import chattingService from '../services/chattingService.js';
+import voiceService from '../services/voiceService.js';
+import generationRepository from '../repositories/generationRepository.js';
 import { getMessageDelay } from '../utils/messageDelay.js';
-import { channel } from 'diagnostics_channel';
+import { GENERATION_STATUS } from '../database/schemas/generations.js';
+import aiService from '../services/aiService.js';
+import { VoiceChannel } from 'discord.js';
 
-const userBuffers = new Map();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const TIMEOUT_MS = 5000;
+const timers = new Map(); // key = `${userId}:${channelId}` -> { timer, lastMessage }
 
-export default function handleMessage(message) {
-  try {
-    const userId = message.author.id;
-    
-    // Save the message to the database
-    chattingService.chat(message, null, null, MESSAGE_STATUS.PENDING);
+export default async function handleMessage(message) {
+  // 봇 메시지는 패스
+  if (message?.author?.bot) return;
 
-    if (!userBuffers.has(userId)) {
-      userBuffers.set(userId, { messages: [], timer: null });
+  const userId = message?.author?.id;
+  const channelId = message?.channel?.id;
+  if (!userId || !channelId) return;
+
+  const key = `${userId}:${channelId}`;
+
+  // 1) 디스코드 원문 그대로 저장
+  await messageService.create(message);
+
+  // 2) 기존 배치 취소 (새 입력으로 교체)
+  chattingService.cancelActive(channelId, userId, 'new-input');
+
+  // 3) 5초 디바운스
+  if (timers.get(key)?.timer) clearTimeout(timers.get(key).timer);
+  timers.set(key, {
+    lastMessage: message,
+    timer: setTimeout(() => runBatch(key), TIMEOUT_MS),
+  });
+}
+
+async function runBatch(key) {
+  const entry = timers.get(key);
+  if (!entry) return;
+  timers.delete(key);
+
+  const msg = entry.lastMessage;
+  const userId = msg.author.id;
+  const channelId = msg.channel.id;
+
+  // UX: 타이핑(있으면 호출)
+  await msg.channel.sendTyping();
+
+  // 4) 배치 처리 (AI 호출/취소/DB는 chattingService가 담당)
+  const genId = await chattingService.chat(channelId, userId);
+  if (!genId) return;
+
+  // 5) 결과 가져와서 보내기 (SUCCESS만)
+  const gen = await generationRepository.findById(genId);
+  if (!gen || gen.status !== GENERATION_STATUS.SUCCESS) return;
+
+  // 문자열이든 배열이든 최소 지원
+  const outs = Array.isArray(gen.aiOutput) ? gen.aiOutput : String(gen.aiOutput ?? '').split('\n').map(s => s.trim()).filter(Boolean);
+
+  // 기존 messageIds에 새로운 sent.id들을 누적해서 추가
+  // gen.messageIds는 DB에서 파싱된 배열
+  const existingMessageIds = gen.messageIds || [];
+  const newMessageIds = [];
+
+  const sameVoiceChannel = await voiceService.getSameVoiceChannel(userId);
+  
+  if (sameVoiceChannel) {
+    for (const text of outs) {
+      const cleanedText = text.replace(/\([^)]*\)/g, '').trim(); // 지시문이 컨텍스트를 오염시키는 것을 방지
+      const sent = makeDummyMessage(cleanedText, channelId);
+      await messageService.create(sent);
+      newMessageIds.push(sent.id);
     }
-    const buffer = userBuffers.get(userId);
-    buffer.messages.push(message);
 
-    if (buffer.timer) {
-      clearTimeout(buffer.timer);
-    }
-
-    buffer.timer = setTimeout(async () => {
-      const startTime = Date.now();
-      
-      try {
-        // start processing the buffered messages
-        const combinedContent = buffer.messages.map(m => m.content).join('\n');
-        console.log('Combined content:', combinedContent);
-
-        const payload = {
-          provider: 'gemini', // AI 프로바이더 지정
-          userInput: combinedContent,
-          userId: userId,
-          timestamp: buffer.messages[0].createdTimestamp,
-          channelId: buffer.messages[0].channel.id
-        };
-        
-        // Update the status of pending messages to 'processing'
-        for (const bufferedMessage of buffer.messages) {
-          chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.PROCESSING);
-        }
-
-
-        const aiResponse = await aiService.generateResponse(payload);
-        const messages = aiResponse.messages;
-
-        // Send response to the channel of the last message
-        const lastMessage = buffer.messages[buffer.messages.length - 1];
-
-        // Send AI response messages
-        const sleep = (ms) => new Promise(res => setTimeout(res, ms));
-
-        for (const message of messages) {
-          await lastMessage.channel.sendTyping();
-          await sleep(getMessageDelay(message));
-          const discordMessage = await lastMessage.channel.send(message);
-
-          // Save the message to the database
-          chattingService.chat(discordMessage, aiResponse.thinking, null, MESSAGE_STATUS.SUCCESS);
-        }
-
-        // Update the status of processed messages to 'success'
-        for (const bufferedMessage of buffer.messages) {
-          chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.SUCCESS);
-        }
-
-        // AI 응답 로그 기록
-        const processingTime = Date.now() - startTime;
-        
-        await logService.logAIResponse({
-          userId: userId,
-          username: lastMessage.author.username,
-          userInput: combinedContent,
-          aiThinking: aiResponse.thinking,
-          aiMessages: messages,
-          channelId: lastMessage.channel.id,
-          guildId: lastMessage.guild?.id || null,
-          processingTime: processingTime,
-          apiRequest: aiResponse.apiRequest,
-          apiResponse: aiResponse.apiResponse
-        });
-
-        // Clear the buffer after processing
-        buffer.messages = [];
-        buffer.timer = null;
-      } catch (error) {
-        console.error('Error in timeout handler:', error);
-        
-        // 에러 로그 기록
-        const lastMessage = buffer.messages[buffer.messages.length - 1];
-        await logService.logError({
-          userId: userId,
-          username: lastMessage.author.username,
-          channelId: lastMessage.channel.id,
-          guildId: lastMessage.guild?.id || null,
-          error: error
-        });
-        
-        // Update the status of failed messages
-        for (const bufferedMessage of buffer.messages) {
-          chattingService.updateStatus(bufferedMessage.id, MESSAGE_STATUS.FAILED, error);
-        }
-        // Clear the buffer even on error
-        buffer.messages = [];
-        buffer.timer = null;
-      }
-    }, TIMEOUT_MS);
-  } catch (error) {
-    console.error('Error handling message:', error);
-    for (const [userId, buffer] of userBuffers.entries()) {
-      for (const bufferedMessage of buffer.messages) {
-        messageRepository.updateByDiscordMessageId(bufferedMessage.id, { response_status: MESSAGE_STATUS.FAILED });
-      }
+    await voiceMode(outs.join('\n'), sameVoiceChannel);
+  } else {
+    for (const text of outs) {
+      await msg.channel.sendTyping();
+      await sleep(getMessageDelay(text));
+      const sent = await msg.channel.send(text);
+      // 봇이 보낸 것도 저장(필요 최소)
+      await messageService.create(sent);
+      // 새로운 메시지 ID 수집
+      newMessageIds.push(sent.id);
     }
   }
+
+  if (newMessageIds.length > 0) {
+    const updatedMessageIds = [...existingMessageIds, ...newMessageIds];
+    generationRepository.update(genId, { messageIds: updatedMessageIds });
+  }
 }
+
+async function voiceMode(text, voiceChannel) {
+  console.log("Voice mode activated");
+
+  try {
+    // TTS 음성 파일 생성
+    await aiService.generateTTS('GEMINI', text);
+
+    // 생성된 TTS 파일의 절대 경로
+    const audioFilePath = path.join(process.cwd(), 'out.wav');
+    
+    // 생성된 TTS 파일 재생
+    const success = await voiceService.play(voiceChannel, audioFilePath);
+
+    if (success) {
+      console.log('TTS 음성 재생 완료');
+    } else {
+      console.error('TTS 음성 재생 실패');
+    }
+  } catch (error) {
+    console.error('voiceMode 실행 중 오류:', error);
+  }
+}
+
+function makeDummyMessage(text, channelId) {
+  const bot = userRepository.findById(process.env.DISCORD_CLIENT_ID);
+  const message = {
+    id: `dummy-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+    channel: { id: channelId },
+    author: {
+      id: bot.id,
+      username: bot.username,
+      globalName: bot.globalName,
+      bot: true
+    },
+    content: text,
+  };
+
+  return message;
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));

@@ -1,30 +1,36 @@
 import { callGeminiAPI } from '../ai/providers/gemini.js';
-import { buildGeminiPrompt } from '../ai/builders/promptBuilder.js';
+import { buildTextPrompt, buildVoicePrompt } from '../ai/builders/promptBuilder.js';
 import { parseModelJson } from '../utils/json.js';
+import saveWaveFile from '../utils/saveWaveFile.js';
+import registry from '../ai/functions/registry.js';
 
 export class AIService {
   /**
    * @returns {Promise<Object>} AI 응답 및 메타데이터
    */
-  async generateResponse({ provider, userId, userInput, timestamp, channelId }) {
+  async generateResponse({ provider, userId, userInput, timestamp, channelId, signal }) {
     try {
       let response;
       let apiRequest;
       let apiResponse;
 
       switch (provider) {
-        case 'gemini': {
-          const prompt = await buildGeminiPrompt(userId, userInput, timestamp, channelId);
-          console.log('Gemini Prompt built:', prompt);
+        case 'GEMINI': {
+          const prompt = await buildTextPrompt(userId, userInput, timestamp, channelId);
           
           // API 요청 정보 저장
           apiRequest = {
             model: 'gemini-2.5-flash-preview-05-20',
-            contents: prompt
+            contents: prompt,
+            config: {
+              // tools: [{
+              //   functionDeclarations: [weatherFunctionDeclaration]
+              // }],
+            },
           };
-          
-          response = await callGeminiAPI(prompt);
-          
+
+          response = await callGeminiAPI(apiRequest);
+
           // API 응답 정보 저장
           apiResponse = response;
           
@@ -35,6 +41,17 @@ export class AIService {
       }
 
       const parts = response?.candidates?.[0]?.content?.parts ?? [];
+
+      const functionCall = parts.find(p => p.functionCall)?.functionCall;
+      let functionResult;
+      if (functionCall) {
+        try {
+          functionResult = await registry.execute(functionCall);
+        } catch (err) {
+          console.error('Function execution error:', err);
+        }
+      }
+
       const responseText = parts
         .map(p => p.text ?? '')
         .join('\n')
@@ -49,7 +66,9 @@ export class AIService {
 
       // API 요청/응답 정보를 포함하여 반환
       return {
-        ...obj,
+        messages: obj.messages,
+        thinking: obj.thinking,
+        functionResult,
         apiRequest,
         apiResponse
       };
@@ -58,6 +77,50 @@ export class AIService {
       throw error;
     }
   }
-}
 
-export const aiService = new AIService();
+  async generateTTS(provider, text) {
+    try {
+      let response;
+      let apiRequest;
+      let apiResponse;
+
+      switch (provider) {
+        case 'GEMINI': {
+          const prompt = await buildVoicePrompt(text);
+
+          // API 요청 정보 저장
+          apiRequest = {
+            model: "gemini-2.5-flash-preview-tts",
+            contents: prompt,
+            config: {
+              responseModalities: ['AUDIO'],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName: 'Leda' },
+                },
+              },
+            },
+          };
+
+          response = await callGeminiAPI(apiRequest);
+
+          // API 응답 정보 저장
+          apiResponse = response;
+          
+          const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+          const audioBuffer = Buffer.from(data, 'base64');
+
+          const fileName = 'out.wav';
+          await saveWaveFile(fileName, audioBuffer);
+
+          break;
+        }
+      }
+    } catch (error) {
+      console.error('Generate TTS Error:', error);
+      throw error;
+    }
+  }
+}
+export default new AIService();
+

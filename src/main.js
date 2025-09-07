@@ -2,9 +2,10 @@ import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { USER_ROLE } from './database/schemas/users.js';
 
-import * as messageRepository from './repositories/messageRepository.js';
-import * as userRepository from './repositories/userRepository.js';
+import messageRepository from './repositories/messageRepository.js';
+import userRepository from './repositories/userRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,11 +29,11 @@ console.log('🤖 DiscordMate starting...');
 
 
 // Check if the user exists in the database, if not, create a new user
-let assistant = userRepository.getById(process.env.DISCORD_CLIENT_ID);
-if (!assistant) {
-  const username = config.char.username;
-  const globalName = config.char.global_name;
-  const preferredName = config.char.preferred_name;
-
-  userRepository.create({ userId: process.env.DISCORD_CLIENT_ID, username, globalName, preferredName });
+let model = userRepository.findById(process.env.DISCORD_CLIENT_ID);
+if (!model) {
+  const userId = process.env.DISCORD_CLIENT_ID;
+  const username = config.reference.char.username;
+  const globalName = config.reference.char.global_name;
+  const role = USER_ROLE.BOT;
+  userRepository.create({ userId, username, globalName, role });
 }
