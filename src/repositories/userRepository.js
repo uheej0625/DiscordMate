@@ -266,8 +266,5 @@ class UserRepository {
   }
 }
 
-// Create singleton instance
-const userRepository = new UserRepository();
-
 // Export as default
-export default userRepository;
+export default new UserRepository();

@@ -1,9 +1,18 @@
-// handlers/handleMessage.js
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import messageService from '../services/messageService.js';
+import userRepository from '../repositories/userRepository.js';
 import chattingService from '../services/chattingService.js';
+import voiceService from '../services/voiceService.js';
 import generationRepository from '../repositories/generationRepository.js';
 import { getMessageDelay } from '../utils/messageDelay.js';
 import { GENERATION_STATUS } from '../database/schemas/generations.js';
+import aiService from '../services/aiService.js';
+import { VoiceChannel } from 'discord.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const TIMEOUT_MS = 5000;
 const timers = new Map(); // key = `${userId}:${channelId}` -> { timer, lastMessage }
@@ -53,28 +62,80 @@ async function runBatch(key) {
   if (!gen || gen.status !== GENERATION_STATUS.SUCCESS) return;
 
   // 문자열이든 배열이든 최소 지원
-  const outs = Array.isArray(gen.ai_output) ? gen.ai_output : String(gen.ai_output ?? '').split('\n').map(s => s.trim()).filter(Boolean);
+  const outs = Array.isArray(gen.aiOutput) ? gen.aiOutput : String(gen.aiOutput ?? '').split('\n').map(s => s.trim()).filter(Boolean);
 
   // 기존 messageIds에 새로운 sent.id들을 누적해서 추가
-  // gen.message_ids_json은 DB에서 파싱된 배열
-  const existingMessageIds = gen.message_ids_json || [];
+  // gen.messageIds는 DB에서 파싱된 배열
+  const existingMessageIds = gen.messageIds || [];
   const newMessageIds = [];
 
-  for (const text of outs) {
-    await msg.channel.sendTyping();
-    await sleep(getMessageDelay(text));
-    const sent = await msg.channel.send(text);
-    // 봇이 보낸 것도 저장(필요 최소)
-    await messageService.create(sent);
-    // 새로운 메시지 ID 수집
-    newMessageIds.push(sent.id);
+  const sameVoiceChannel = await voiceService.getSameVoiceChannel(userId);
+  
+  if (sameVoiceChannel) {
+    for (const text of outs) {
+      const cleanedText = text.replace(/\([^)]*\)/g, '').trim(); // 지시문이 컨텍스트를 오염시키는 것을 방지
+      const sent = makeDummyMessage(cleanedText, channelId);
+      await messageService.create(sent);
+      newMessageIds.push(sent.id);
+    }
+
+    await voiceMode(outs.join('\n'), sameVoiceChannel);
+  } else {
+    for (const text of outs) {
+      await msg.channel.sendTyping();
+      await sleep(getMessageDelay(text));
+      const sent = await msg.channel.send(text);
+      // 봇이 보낸 것도 저장(필요 최소)
+      await messageService.create(sent);
+      // 새로운 메시지 ID 수집
+      newMessageIds.push(sent.id);
+    }
   }
 
-  // 모든 메시지 전송 후 한 번에 업데이트
   if (newMessageIds.length > 0) {
     const updatedMessageIds = [...existingMessageIds, ...newMessageIds];
     generationRepository.update(genId, { messageIds: updatedMessageIds });
   }
+}
+
+async function voiceMode(text, voiceChannel) {
+  console.log("Voice mode activated");
+
+  try {
+    // TTS 음성 파일 생성
+    await aiService.generateTTS('GEMINI', text);
+
+    // 생성된 TTS 파일의 절대 경로
+    const audioFilePath = path.join(process.cwd(), 'out.wav');
+    
+    // 생성된 TTS 파일 재생
+    const success = await voiceService.play(voiceChannel, audioFilePath);
+
+    if (success) {
+      console.log('TTS 음성 재생 완료');
+    } else {
+      console.error('TTS 음성 재생 실패');
+    }
+  } catch (error) {
+    console.error('voiceMode 실행 중 오류:', error);
+  }
+}
+
+function makeDummyMessage(text, channelId) {
+  const bot = userRepository.findById(process.env.DISCORD_CLIENT_ID);
+  const message = {
+    id: `dummy-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+    channel: { id: channelId },
+    author: {
+      id: bot.id,
+      username: bot.username,
+      globalName: bot.globalName,
+      bot: true
+    },
+    content: text,
+  };
+
+  return message;
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));

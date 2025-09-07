@@ -1,5 +1,6 @@
 import { Events } from 'discord.js';
 import { logService } from '../../services/logService.js';
+import voiceService from '../../services/voiceService.js';
 
 export default {
   name: Events.ClientReady,
@@ -9,6 +10,9 @@ export default {
     
     // Discord client를 logService에 전달
     logService.setClient(client);
+    
+    // Discord client를 voiceService에 전달
+    voiceService.setClient(client);
     
     // 로그 채널 초기화
     const success = await logService.initializeLogChannel();

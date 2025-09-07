@@ -6,11 +6,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const PROMPT_CATEGORY = {
-  SYSTEM: 'system',
-  USERINPUT: 'userInput'
-};
-
 /**
  * Loads a prompt file and replaces variables, returning it as a string.
  * @param {string} category - Prompt name (e.g., "basic", "test")
@@ -18,7 +13,7 @@ export const PROMPT_CATEGORY = {
  * @param {Object} variables - Variables to replace
  * @returns {string} Prompt string with variables replaced
  */
-export function templateRenderer(category, type, variables = {}) {
+export default function templateRenderer(category, type, variables = {}) {
   const promptsPath = path.join(__dirname, '../', 'ai/prompts');
 
   const filePath = path.join(promptsPath, category, `${type}.md`);

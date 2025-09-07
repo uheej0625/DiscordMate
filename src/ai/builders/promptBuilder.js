@@ -3,7 +3,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import contextBuilder from './contextBuilder.js';
-import { templateRenderer, PROMPT_CATEGORY } from '../../utils/templateRenderer.js';
+import templateRenderer from '../../utils/templateRenderer.js';
+import voiceService from '../../services/voiceService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,8 +16,12 @@ const __dirname = path.dirname(__filename);
  * @param {number} timestamp - Request timestamp
  * @returns {Array} Complete prompt array for Gemini API
  */
-export async function buildPrompt(userId, userInput, timestamp, channelId) {
+export async function buildTextPrompt(userId, userInput, timestamp, channelId) {
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../..', 'config.json'), 'utf-8'));
+
+  console.log('Voice channel for user:', voiceService.getSameVoiceChannel(userId));
+
+  const promptSet = voiceService.getSameVoiceChannel(userId) ? 'voice' : config.ai.prompt;
 
   const variables = {
     char: config.reference.char,
@@ -30,15 +35,24 @@ export async function buildPrompt(userId, userInput, timestamp, channelId) {
 
   promptArray.push({
     role: 'user',
-    parts: [{ text: templateRenderer(config.ai.prompt, PROMPT_CATEGORY.SYSTEM, variables) }]
+    parts: [{ text: templateRenderer(promptSet, 'system', variables) }]
   });
 
   promptArray.push(...(await contextBuilder(channelId)));
 
   promptArray.push({
     role: 'user',
-    parts: [{ text: templateRenderer(config.ai.prompt, PROMPT_CATEGORY.USERINPUT, variables) }]
+    parts: [{ text: templateRenderer(promptSet, 'userInput', variables) }]
   });
 
   return promptArray;
+}
+
+export async function buildVoicePrompt(text) {
+
+  const variables = {
+    text: text
+  };
+
+  return [{ text: templateRenderer('voice', 'tts', variables) }];
 }
