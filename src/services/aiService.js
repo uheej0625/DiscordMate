@@ -1,8 +1,8 @@
 import { callGeminiAPI } from '../ai/providers/gemini.js';
-import { buildTextPrompt, buildVoicePrompt } from '../ai/builders/promptBuilder.js';
+import { buildTextPrompt, buildTTSPrompt } from '../ai/builders/promptBuilder.js';
 import { parseModelJson } from '../utils/json.js';
 import saveWaveFile from '../utils/saveWaveFile.js';
-import registry from '../ai/functions/registry.js';
+import registry from '../ai/functions/setLightValues.js';
 
 export class AIService {
   /**
@@ -16,18 +16,8 @@ export class AIService {
 
       switch (provider) {
         case 'GEMINI': {
-          const prompt = await buildTextPrompt(userId, userInput, timestamp, channelId);
-          
-          // API 요청 정보 저장
-          apiRequest = {
-            model: 'gemini-2.5-flash-preview-05-20',
-            contents: prompt,
-            config: {
-              // tools: [{
-              //   functionDeclarations: [weatherFunctionDeclaration]
-              // }],
-            },
-          };
+          // API 요청 객체 생성
+          apiRequest = await buildTextPrompt(userId, userInput, timestamp, channelId);
 
           response = await callGeminiAPI(apiRequest);
 
@@ -86,21 +76,8 @@ export class AIService {
 
       switch (provider) {
         case 'GEMINI': {
-          const prompt = await buildVoicePrompt(text);
-
-          // API 요청 정보 저장
-          apiRequest = {
-            model: "gemini-2.5-flash-preview-tts",
-            contents: prompt,
-            config: {
-              responseModalities: ['AUDIO'],
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: { voiceName: 'Leda' },
-                },
-              },
-            },
-          };
+          // API 요청 객체 생성
+          apiRequest = await buildTTSPrompt(text);
 
           response = await callGeminiAPI(apiRequest);
 
@@ -123,4 +100,3 @@ export class AIService {
   }
 }
 export default new AIService();
-

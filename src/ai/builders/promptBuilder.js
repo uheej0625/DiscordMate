@@ -10,16 +10,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Builds the complete prompt array for Gemini API request.
+ * Builds the complete API request object for Gemini text generation.
  * @param {string} userId - User's unique identifier
  * @param {string} userInput - User's input message
  * @param {number} timestamp - Request timestamp
- * @returns {Array} Complete prompt array for Gemini API
+ * @param {string} channelId - Channel identifier
+ * @returns {Object} Complete API request object for Gemini
  */
 export async function buildTextPrompt(userId, userInput, timestamp, channelId) {
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../..', 'config.json'), 'utf-8'));
-
-  console.log('Voice channel for user:', voiceService.getSameVoiceChannel(userId));
 
   const promptSet = voiceService.getSameVoiceChannel(userId) ? 'voice' : config.ai.prompt;
 
@@ -44,15 +43,40 @@ export async function buildTextPrompt(userId, userInput, timestamp, channelId) {
     role: 'user',
     parts: [{ text: templateRenderer(promptSet, 'userInput', variables) }]
   });
-
-  return promptArray;
+  
+  return {
+    model: 'gemini-2.5-flash-preview-05-20',
+    contents: promptArray,
+    config: {
+      // tools: [{
+      //   functionDeclarations: [setLightValuesFunctionDeclaration]
+      // }],
+    },
+  };
 }
 
-export async function buildVoicePrompt(text) {
-
+/**
+ * Builds the complete API request object for Gemini TTS.
+ * @param {string} text - Text to convert to speech
+ * @returns {Object} Complete API request object for Gemini TTS
+ */
+export async function buildTTSPrompt(text) {
   const variables = {
     text: text
   };
 
-  return [{ text: templateRenderer('voice', 'tts', variables) }];
+  const prompt = [{ text: templateRenderer('voice', 'tts', variables) }];
+  
+  return {
+    model: "gemini-2.5-flash-preview-tts",
+    contents: prompt,
+    config: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: 'Leda' },
+        },
+      },
+    },
+  };
 }
