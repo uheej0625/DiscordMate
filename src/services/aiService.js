@@ -2,7 +2,6 @@ import { callGeminiAPI } from '../ai/providers/gemini.js';
 import { buildTextPrompt, buildTTSPrompt } from '../ai/builders/promptBuilder.js';
 import { parseModelJson } from '../utils/json.js';
 import saveWaveFile from '../utils/saveWaveFile.js';
-import registry from '../ai/functions/setLightValues.js';
 
 export class AIService {
   /**

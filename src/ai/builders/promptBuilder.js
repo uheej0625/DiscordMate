@@ -19,8 +19,9 @@ const __dirname = path.dirname(__filename);
  */
 export async function buildTextPrompt(userId, userInput, timestamp, channelId) {
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../..', 'config.json'), 'utf-8'));
+  const promptSet = config.ai.prompt;
 
-  const promptSet = voiceService.getSameVoiceChannel(userId) ? 'voice' : config.ai.prompt;
+  const responseType = voiceService.getSameVoiceChannel(userId) ? 'voice' : 'text';
 
   const variables = {
     char: config.reference.char,
@@ -34,14 +35,14 @@ export async function buildTextPrompt(userId, userInput, timestamp, channelId) {
 
   promptArray.push({
     role: 'user',
-    parts: [{ text: templateRenderer(promptSet, 'system', variables) }]
+    parts: [{ text: templateRenderer(promptSet, responseType, 'system', variables) }]
   });
 
   promptArray.push(...(await contextBuilder(channelId)));
 
   promptArray.push({
     role: 'user',
-    parts: [{ text: templateRenderer(promptSet, 'userInput', variables) }]
+    parts: [{ text: templateRenderer(promptSet, responseType, 'userInput', variables) }]
   });
   
   return {
@@ -61,12 +62,13 @@ export async function buildTextPrompt(userId, userInput, timestamp, channelId) {
  * @returns {Object} Complete API request object for Gemini TTS
  */
 export async function buildTTSPrompt(text) {
+  const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../..', 'config.json'), 'utf-8'));
   const variables = {
     text: text
   };
 
-  const prompt = [{ text: templateRenderer('voice', 'tts', variables) }];
-  
+  const prompt = [{ text: templateRenderer(config.ai.prompt, 'voice', 'tts', variables) }];
+
   return {
     model: "gemini-2.5-flash-preview-tts",
     contents: prompt,
