@@ -1,8 +1,12 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { joinVoiceChannel, getVoiceConnection, VoiceConnectionStatus, entersState, AudioPlayerStatus, createAudioPlayer, createAudioResource } from '@discordjs/voice';
 
-const config = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '../../config.json'), 'utf-8'));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../..', 'config.json'), 'utf-8'));
 
 class VoiceService {
   constructor() {
