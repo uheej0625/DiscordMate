@@ -58,6 +58,14 @@ class ChattingService {
     activeGenerations.set(key, { genId: generation.id, abortController });
 
     try {
+      const decision = await aiService.generateDecision({
+        provider: 'GEMINI',
+        userInput: messages.map(message => message.content ?? '').join('\n'),
+        channelId
+      });
+
+      console.log('AI Decision:', decision.response);
+
       // 4) Call AI service
       const response = await aiService.generateResponse({
         provider: 'GEMINI',

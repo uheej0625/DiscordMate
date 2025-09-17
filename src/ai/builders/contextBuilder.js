@@ -5,9 +5,10 @@ import messageRepository from '../../repositories/messageRepository.js';
  * - Fetch recent messages in DESC, then reverse to ASC
  * - Fold consecutive messages by the same speaker into a single turn
  * @param {string} channelId
+ * @param {number} maxTurns - Maximum number of conversation turns to include (default: unlimited)
  * @returns {Promise<Array<{ role: 'user'|'model', parts: Array<{ text: string }> }>>}
  */
-export default async function contextBuilder(channelId) {
+export default async function contextBuilder(channelId, maxTurns = null) {
   // 1) Fetch recent-first (DESC). Apply limit at the DB layer if supported.
   const descHistory = await messageRepository.find(
     { channelId },
@@ -41,6 +42,11 @@ export default async function contextBuilder(channelId) {
   // Remove the last turn if it's a user turn
   if (turns.length > 0 && turns[turns.length - 1].role === 'user') {
     turns.pop();
+  }
+
+  // Limit turns if maxTurns is specified
+  if (maxTurns && maxTurns > 0 && turns.length > maxTurns) {
+    return turns.slice(-maxTurns);
   }
 
   return turns;

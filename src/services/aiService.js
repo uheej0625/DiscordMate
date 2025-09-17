@@ -1,5 +1,5 @@
 import { callGeminiAPI } from '../ai/providers/gemini.js';
-import { buildTextPrompt, buildTTSPrompt } from '../ai/builders/promptBuilder.js';
+import { buildTextPrompt, buildTTSPrompt, buildDecisionPrompt } from '../ai/builders/promptBuilder.js';
 import { parseModelJson } from '../utils/json.js';
 import saveWaveFile from '../utils/saveWaveFile.js';
 
@@ -31,15 +31,15 @@ export class AIService {
 
       const parts = response?.candidates?.[0]?.content?.parts ?? [];
 
-      const functionCall = parts.find(p => p.functionCall)?.functionCall;
-      let functionResult;
-      if (functionCall) {
-        try {
-          functionResult = await registry.execute(functionCall);
-        } catch (err) {
-          console.error('Function execution error:', err);
-        }
-      }
+      // const functionCall = parts.find(p => p.functionCall)?.functionCall;
+      // let functionResult;
+      // if (functionCall) {
+      //   try {
+      //     functionResult = await registry.execute(functionCall);
+      //   } catch (err) {
+      //     console.error('Function execution error:', err);
+      //   }
+      // }
 
       const responseText = parts
         .map(p => p.text ?? '')
@@ -57,7 +57,6 @@ export class AIService {
       return {
         messages: obj.messages,
         thinking: obj.thinking,
-        functionResult,
         apiRequest,
         apiResponse
       };
@@ -94,6 +93,47 @@ export class AIService {
       }
     } catch (error) {
       console.error('Generate TTS Error:', error);
+      throw error;
+    }
+  }
+
+  async generateDecision({ provider, userInput, channelId }) {
+    try {
+      let response;
+      let apiRequest;
+      let apiResponse;
+
+      switch (provider) {
+        case 'GEMINI': {
+          // API 요청 객체 생성
+          apiRequest = await buildDecisionPrompt(userInput, channelId, 2);
+
+          response = await callGeminiAPI(apiRequest);
+
+          // API 응답 정보 저장
+          apiResponse = response;
+          
+          break;
+        }
+        default:
+          throw new Error(`Provider '${provider}' is not available`);
+      }
+      
+      const responseText = response?.candidates?.[0]?.content?.parts[0]?.text;
+      
+      // 텍스트를 불리언으로 변환 - 엄격하게 "true"인 경우만 true 반환
+      const cleanText = responseText?.toLowerCase?.().trim() || '';
+      const decision = cleanText === 'true';
+      
+      return {
+        decision: decision,
+        response: responseText,    // TODO: 이 부분은 function call 이 반영되지 않았으므로 다시 작성해야 함
+        apiRequest,
+        apiResponse
+      };
+
+    } catch (error) {
+      console.error('Generate Decision Error:', error);
       throw error;
     }
   }
