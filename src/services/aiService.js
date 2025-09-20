@@ -2,6 +2,7 @@ import { callGeminiAPI } from '../ai/providers/gemini.js';
 import { buildTextPrompt, buildTTSPrompt, buildDecisionPrompt } from '../ai/builders/promptBuilder.js';
 import { parseModelJson } from '../utils/json.js';
 import saveWaveFile from '../utils/saveWaveFile.js';
+import { executeFunction } from '../ai/utils/functionLoader.js';
 
 export class AIService {
   /**
@@ -31,15 +32,29 @@ export class AIService {
 
       const parts = response?.candidates?.[0]?.content?.parts ?? [];
 
-      // const functionCall = parts.find(p => p.functionCall)?.functionCall;
-      // let functionResult;
-      // if (functionCall) {
-      //   try {
-      //     functionResult = await registry.execute(functionCall);
-      //   } catch (err) {
-      //     console.error('Function execution error:', err);
-      //   }
-      // }
+      // 함수 호출 처리
+      let functionResults = [];
+      for (const part of parts) {
+        if (part.functionCall) {
+          try {
+            const { name, args } = part.functionCall;
+            const result = await executeFunction(name, args);
+            functionResults.push({
+              functionName: name,
+              args: args,
+              result: result
+            });
+            console.log(`Function ${name} executed:`, result);
+          } catch (error) {
+            console.error(`Function execution error for ${part.functionCall.name}:`, error);
+            functionResults.push({
+              functionName: part.functionCall.name,
+              args: part.functionCall.args,
+              error: error.message
+            });
+          }
+        }
+      }
 
       const responseText = parts
         .map(p => p.text ?? '')
@@ -57,6 +72,7 @@ export class AIService {
       return {
         messages: obj.messages,
         thinking: obj.thinking,
+        functionResults: functionResults, // 함수 실행 결과 추가
         apiRequest,
         apiResponse
       };
@@ -118,20 +134,38 @@ export class AIService {
         default:
           throw new Error(`Provider '${provider}' is not available`);
       }
-      
-      const responseText = response?.candidates?.[0]?.content?.parts[0]?.text;
-      
+
+      const responseContent = response?.candidates?.[0]?.content?.parts[0];
+
+      console.log('Decision Response Content:', responseContent);
+
+      let functionResult = null;
+      if (responseContent?.functionCall) {
+        console.log('Function Call Detected:', responseContent.functionCall);
+        
+        try {
+          // 함수 실행
+          const { name, args } = responseContent.functionCall;
+          functionResult = await executeFunction(name, args);
+          console.log('Function Result:', functionResult);
+        } catch (error) {
+          console.error('Function execution error:', error);
+          functionResult = `Error executing function: ${error.message}`;
+        }
+      }
+
       // 텍스트를 불리언으로 변환 - 엄격하게 "true"인 경우만 true 반환
-      const cleanText = responseText?.toLowerCase?.().trim() || '';
+      const cleanText = responseContent?.text?.toLowerCase?.().trim() || '';
       const decision = cleanText === 'true';
       
       return {
         decision: decision,
-        response: responseText,    // TODO: 이 부분은 function call 이 반영되지 않았으므로 다시 작성해야 함
+        response: responseContent,
+        functionResult: functionResult, // 함수 실행 결과 추가
         apiRequest,
         apiResponse
       };
-
+ 
     } catch (error) {
       console.error('Generate Decision Error:', error);
       throw error;

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import contextBuilder from './contextBuilder.js';
 import templateRenderer from '../../utils/templateRenderer.js';
 import voiceService from '../../services/voiceService.js';
+import { loadFunctionDeclarations } from '../utils/functionLoader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,14 +46,17 @@ export async function buildTextPrompt(userId, userInput, timestamp, channelId, m
     role: 'user',
     parts: [{ text: templateRenderer(promptSet, responseType, 'userInput', variables) }]
   });
+
+  // 동적으로 함수 declarations 로드
+  const functionDeclarations = await loadFunctionDeclarations();
   
   return {
     model: 'gemini-2.5-flash-preview-05-20',
     contents: promptArray,
     config: {
-      // tools: [{
-      //   functionDeclarations: [setLightValuesFunctionDeclaration]
-      // }],
+      tools: functionDeclarations.length > 0 ? [{
+        functionDeclarations: functionDeclarations
+      }] : undefined,
     },
   };
 }
@@ -96,7 +100,7 @@ export async function buildDecisionPrompt(text, channelId, maxTurns = 2) {
 
   const promptSet = config.ai.prompt;
   const variables = {
-    text: text
+    userInput: text
   };
 
   const promptArray = [];
@@ -113,13 +117,21 @@ export async function buildDecisionPrompt(text, channelId, maxTurns = 2) {
     parts: [{ text: templateRenderer(promptSet, 'decision', 'userInput', variables) }]
   });
 
+  // 동적으로 함수 declarations 로드
+  const functionDeclarations = await loadFunctionDeclarations();
+
   return {
     model: "gemini-2.5-flash-lite",
     contents: promptArray,
     config: {
-      // tools: [{
-      //   functionDeclarations: [setLightValuesFunctionDeclaration]
-      // }],
+      tools: functionDeclarations.length > 0 ? [{
+        functionDeclarations: functionDeclarations
+      }] : undefined,
+      // toolConfig: {
+      //   functionCallingConfig: {
+      //     mode: 'any'
+      //   }
+      // }
     },
   };
 }
