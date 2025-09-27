@@ -58,13 +58,43 @@ class ChattingService {
     activeGenerations.set(key, { genId: generation.id, abortController });
 
     try {
-      const decision = await aiService.generateDecision({
+      let decision = await aiService.generateDecision({
         provider: 'GEMINI',
         userInput: messages.map(message => message.content ?? '').join('\n'),
         channelId
       });
 
-      console.log('AI Decision:', decision.response);
+      console.log('AI Decision (1st attempt):', decision);
+
+      // Decision 로직: wait면 최대 2번까지 재시도
+      let decisionAttempts = 1;
+      let functionResults = [];
+
+      while (decision.decision === 'wait' && decisionAttempts < 3) {
+        console.log(`Waiting 5 seconds before retry (attempt ${decisionAttempts}/2)...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        decisionAttempts++;
+        decision = await aiService.generateDecision({
+          provider: 'GEMINI',
+          userInput: messages.map(message => message.content ?? '').join('\n'),
+          channelId
+        });
+
+        console.log(`AI Decision (${decisionAttempts}${decisionAttempts === 2 ? 'nd' : 'rd'} attempt):`, decision);
+      }
+
+      // functionCall 결과 수집
+      if (decision.decision === 'functionCall' && decision.functionResult) {
+        functionResults.push(decision.functionResult);
+        console.log('Function executed, proceeding with response generation...');
+      }
+
+      // 3번째 시도에서도 wait이면 그냥 진행
+      if (decision.decision === 'wait' && decisionAttempts >= 3) {
+        console.log('Final wait decision - proceeding anyway after 5 seconds...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
 
       // 4) Call AI service
       const response = await aiService.generateResponse({
@@ -73,6 +103,7 @@ class ChattingService {
         userInput: messages.map(message => message.content ?? '').join('\n'),
         timestamp: Date.now(),
         channelId,
+        functionCallResults: functionResults.length > 0 ? functionResults : null,
         signal: abortController.signal // ← Cancel support
       });
 

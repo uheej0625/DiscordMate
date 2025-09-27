@@ -17,6 +17,6 @@ export const declaration = {
 
 export function getCurrentTemperature({ location }) {
   // 여기서는 실제 API 호출 대신 더미 데이터를 반환합니다.
-  const dummyTemperature = 20; // 예: 20도
+  const dummyTemperature = 50; // 예: 50도
   return `The current temperature in ${location} is ${dummyTemperature}°C.`;
 }

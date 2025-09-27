@@ -16,10 +16,11 @@ const __dirname = path.dirname(__filename);
  * @param {string} userInput - User's input message
  * @param {number} timestamp - Request timestamp
  * @param {string} channelId - Channel identifier
+ * @param {Array|null} functionCallResults - Results from function calls (optional)
  * @param {number} maxTurns - Maximum number of conversation turns to include (default: unlimited)
  * @returns {Object} Complete API request object for Gemini
  */
-export async function buildTextPrompt(userId, userInput, timestamp, channelId, maxTurns = null) {
+export async function buildTextPrompt(userId, userInput, timestamp, channelId, functionCallResults = null, maxTurns = null) {
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../..', 'config.json'), 'utf-8'));
   const promptSet = config.ai.prompt;
 
@@ -46,6 +47,14 @@ export async function buildTextPrompt(userId, userInput, timestamp, channelId, m
     role: 'user',
     parts: [{ text: templateRenderer(promptSet, responseType, 'userInput', variables) }]
   });
+
+  // Function call 결과가 있으면 추가
+  if (functionCallResults && Array.isArray(functionCallResults) && functionCallResults.length > 0) {
+    promptArray.push({
+      role: 'user',
+      parts: [{ text: `Function Results:\n${functionCallResults.join('\n')}` }]
+    });
+  }
 
   // 동적으로 함수 declarations 로드
   const functionDeclarations = await loadFunctionDeclarations();

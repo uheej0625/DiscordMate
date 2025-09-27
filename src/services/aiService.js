@@ -8,7 +8,7 @@ export class AIService {
   /**
    * @returns {Promise<Object>} AI 응답 및 메타데이터
    */
-  async generateResponse({ provider, userId, userInput, timestamp, channelId, signal }) {
+  async generateResponse({ provider, userId, userInput, timestamp, channelId, functionCallResults, signal }) {
     try {
       let response;
       let apiRequest;
@@ -17,7 +17,7 @@ export class AIService {
       switch (provider) {
         case 'GEMINI': {
           // API 요청 객체 생성
-          apiRequest = await buildTextPrompt(userId, userInput, timestamp, channelId);
+          apiRequest = await buildTextPrompt(userId, userInput, timestamp, channelId, functionCallResults);
 
           response = await callGeminiAPI(apiRequest);
 
@@ -30,36 +30,8 @@ export class AIService {
           throw new Error(`Provider '${provider}' is not available`);
       }
 
-      const parts = response?.candidates?.[0]?.content?.parts ?? [];
-
-      // 함수 호출 처리
-      let functionResults = [];
-      for (const part of parts) {
-        if (part.functionCall) {
-          try {
-            const { name, args } = part.functionCall;
-            const result = await executeFunction(name, args);
-            functionResults.push({
-              functionName: name,
-              args: args,
-              result: result
-            });
-            console.log(`Function ${name} executed:`, result);
-          } catch (error) {
-            console.error(`Function execution error for ${part.functionCall.name}:`, error);
-            functionResults.push({
-              functionName: part.functionCall.name,
-              args: part.functionCall.args,
-              error: error.message
-            });
-          }
-        }
-      }
-
-      const responseText = parts
-        .map(p => p.text ?? '')
-        .join('\n')
-        .trim();
+      const responseText = response?.candidates?.[0]?.content?.parts[0].text ?? '';
+      console.log('Raw AI Response Text:', responseText);
 
       const obj = parseModelJson(responseText);
       console.log('Parsed AI Response:', obj);
@@ -72,7 +44,6 @@ export class AIService {
       return {
         messages: obj.messages,
         thinking: obj.thinking,
-        functionResults: functionResults, // 함수 실행 결과 추가
         apiRequest,
         apiResponse
       };
@@ -137,7 +108,7 @@ export class AIService {
 
       const responseContent = response?.candidates?.[0]?.content?.parts[0];
 
-      console.log('Decision Response Content:', responseContent);
+      console.log('Decision Response Content:', JSON.stringify(responseContent, null, 2));
 
       let functionResult = null;
       if (responseContent?.functionCall) {
@@ -154,13 +125,25 @@ export class AIService {
         }
       }
 
-      // 텍스트를 불리언으로 변환 - 엄격하게 "true"인 경우만 true 반환
-      const cleanText = responseContent?.text?.toLowerCase?.().trim() || '';
-      const decision = cleanText === 'true';
+      // AI 응답에서 불필요한 문자들 제거 (개행, 공백, 특수문자 등)
+      const cleanText = (responseContent?.text || '')
+        .toLowerCase()
+        .replace(/[\n\r\t\s]/g, '') // 모든 공백 문자 제거
+        .replace(/[^\w]/g, ''); // 알파벳, 숫자가 아닌 문자 제거
       
+      let decision;
+      if (cleanText === 'reply') {
+        decision = 'reply';
+      } else if (cleanText === 'wait') {
+        decision = 'wait';
+      } else if (functionResult !== null) {
+        decision = 'functionCall';
+      } else {
+        decision = 'error';
+      }
+
       return {
         decision: decision,
-        response: responseContent,
         functionResult: functionResult, // 함수 실행 결과 추가
         apiRequest,
         apiResponse
