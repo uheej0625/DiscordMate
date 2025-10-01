@@ -4,12 +4,34 @@ import { pathToFileURL } from 'url';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
-import { Client, Collection, ActivityType, ChannelType, EmbedBuilder, REST, Routes } from 'discord.js';
+import { Client, Collection, REST, Routes } from 'discord.js';
 
 import { discordConfig } from '../config/discord.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+/**
+ * Load JavaScript files from a directory
+ * @param {string} dirPath - Directory path to load files from
+ * @returns {Promise<Array>} Array of loaded modules
+ */
+async function loadModulesFromDirectory(dirPath) {
+  if (!fs.existsSync(dirPath)) {
+    return [];
+  }
+
+  const files = fs.readdirSync(dirPath).filter(file => file.endsWith('.js'));
+  const modules = [];
+
+  for (const file of files) {
+    const filePath = `${dirPath}/${file}`;
+    const moduleTemp = await import(pathToFileURL(filePath).href);
+    modules.push(moduleTemp.default);
+  }
+
+  return modules;
+}
 
 // Discord client setup
 const client = new Client({
@@ -33,52 +55,41 @@ client.login(discordConfig.token).catch(error => {
 
 // Slash command handling
 client.commands = new Collection();
-const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
+const commands = await loadModulesFromDirectory(commandsPath);
 
-// Check if commands directory exists and has files
-if (fs.existsSync(commandsPath)) {
-  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-  
-  for (const file of commandFiles) {
-    const commandPath = `${commandsPath}/${file}`;
-    const commandTemp = await import(pathToFileURL(commandPath).href);
-    const command = commandTemp.default;
+if (commands.length > 0) {
+  // Add commands to client collection
+  commands.forEach(command => {
     client.commands.set(command.data.name, command);
-    commands.push(command.data);
-  }
+  });
   
   console.log(`📝 Loaded ${commands.length} slash commands`);
-} else {
-  console.log('📝 No commands directory found, skipping command registration');
-}
-
-// Only register commands if there are any
-if (commands.length > 0) {
+  
+  // Register commands with Discord
   const rest = new REST({ version: "10" }).setToken(discordConfig.token);
   rest
-    .put(Routes.applicationCommands(discordConfig.clientId), { body: commands })
+    .put(Routes.applicationCommands(discordConfig.clientId), { 
+      body: commands.map(cmd => cmd.data) 
+    })
     .then((registeredCommands) => console.log(`✅ Successfully registered ${registeredCommands.length} application commands.`))
     .catch(console.error);
+} else {
+  console.log('📝 No commands found, skipping command registration');
 }
 
 // Event handling
 const eventsPath = path.join(__dirname, 'events');
-const eventFiles = fs.readdirSync(`${eventsPath}`).filter(file => file.endsWith('.js'));
+const events = await loadModulesFromDirectory(eventsPath);
 
-let eventCount = 0;
-for (const file of eventFiles) {
-  const eventPath = `${eventsPath}/${file}`;
-  const eventTemp = await import(pathToFileURL(eventPath).href);
-  const event = eventTemp.default;
+events.forEach(event => {
   if (event.once) {
     client.once(event.name, (...args) => event.execute(...args));
   } else {
     client.on(event.name, (...args) => event.execute(...args));
   }
-  eventCount++;
-}
+});
 
-console.log(`🎧 Successfully loaded ${eventCount} event handlers`);
+console.log(`🎧 Successfully loaded ${events.length} event handlers`);
 
 export default client;

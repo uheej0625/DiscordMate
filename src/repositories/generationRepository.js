@@ -34,6 +34,24 @@ const fieldMapping = {
   reasons: 'reasons'
 };
 
+// Fields that require JSON parsing
+const JSON_FIELDS = new Set(['api_request', 'api_response']);
+
+/**
+ * Safely parse JSON value, returning default on error
+ * @param {string} value - JSON string to parse
+ * @param {*} defaultValue - Default value if parsing fails
+ * @returns {*} Parsed value or default
+ */
+function safeJsonParse(value, defaultValue = null) {
+  if (!value) return defaultValue;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return defaultValue;
+  }
+}
+
 /**
  * Convert database result from snake_case to camelCase
  * @param {Object} dbResult - Database result object
@@ -44,15 +62,21 @@ function toCamelCase(obj) {
   
   const result = {};
   for (const [key, value] of Object.entries(obj)) {
-    // Convert snake_case to camelCase
-    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-    
-    // Special handling for JSON fields
-    if (key.includes('_json')) {
-      result[camelKey.replace('Json', 'Ids')] = value ? JSON.parse(value) : [];
-    } else if (key === 'api_request' || key === 'api_response') {
-      result[camelKey] = value ? JSON.parse(value) : null;
-    } else {
+    // Handle JSON array fields (e.g., message_ids_json -> messageIds)
+    if (key.endsWith('_json')) {
+      // Remove _json suffix before converting to camelCase
+      const baseKey = key.replace(/_json$/, '');
+      const camelKey = baseKey.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      result[camelKey] = safeJsonParse(value, []);
+    } 
+    // Handle JSON object fields (e.g., api_request -> apiRequest)
+    else if (JSON_FIELDS.has(key)) {
+      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      result[camelKey] = safeJsonParse(value, null);
+    } 
+    // Regular fields
+    else {
+      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
       result[camelKey] = value;
     }
   }

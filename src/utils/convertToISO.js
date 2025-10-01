@@ -8,17 +8,29 @@
  * @returns {string} ISO 8601 formatted timestamp string
  */
 function convertToISO(input) {
+  // Return current time if no input
   if (!input) {
     return new Date().toISOString();
-  } else if (typeof input === 'number') {
+  }
+
+  // Handle numeric timestamps (Unix time in ms)
+  if (typeof input === 'number') {
     return new Date(input).toISOString();
-  } else if (input instanceof Date) {
+  }
+
+  // Handle Date objects
+  if (input instanceof Date) {
     return input.toISOString();
-  } else if (typeof input === 'string' && !input.includes('T')) {
+  }
+
+  // Handle string inputs
+  if (typeof input === 'string') {
+    // Already in ISO format (contains 'T' separator)
+    if (input.includes('T')) {
+      return input;
+    }
+    // Convert other string formats to ISO
     return new Date(input).toISOString();
-  } else if (typeof input === 'string' && input.includes('T')) {
-    // Already in ISO format, return as is
-    return input;
   }
   
   // Fallback to current time if format is unrecognized
