@@ -1,33 +1,65 @@
-export function parseModelJson(raw) {
-  if (typeof raw === 'object' && raw !== null) return raw;
+/**
+ * Extract JSON from code fence (```json ... ```)
+ * @param {string} text - Text that may contain code fence
+ * @returns {string} Extracted content or original text
+ */
+function extractFromCodeFence(text) {
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  return fence ? fence[1].trim() : text;
+}
 
+/**
+ * Try to extract and parse JSON object from text
+ * @param {string} text - Text that may contain JSON
+ * @returns {Object|null} Parsed object or null if extraction fails
+ */
+function tryExtractJsonObject(text) {
+  const startIdx = text.indexOf('{');
+  const endIdx = text.lastIndexOf('}');
+  
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+    return null;
+  }
+
+  try {
+    const jsonStr = text.slice(startIdx, endIdx + 1);
+    return JSON.parse(jsonStr);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse model output as JSON with fallback handling
+ * @param {*} raw - Raw model output (object, string, etc.)
+ * @returns {Object} Parsed JSON object
+ * @throws {Error} If raw is neither an object nor a string
+ */
+export function parseModelJson(raw) {
+  // Already an object, return as-is
+  if (typeof raw === 'object' && raw !== null) {
+    return raw;
+  }
+
+  // Must be a string to parse
   if (typeof raw !== 'string') {
     throw new Error('모델 응답이 문자열도 객체도 아님');
   }
 
-  const s = raw.trim();
+  const trimmed = raw.trim();
+  const payload = extractFromCodeFence(trimmed);
 
-  // 2) ```json ... ``` extract
-  const fence = s.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  const payload = fence ? fence[1].trim() : s;
-
-  // 3) 1차 JSON.parse
+  // Try direct JSON parse
   try {
     return JSON.parse(payload);
-  } catch(error) {
-    // JSON 객체 형태가 있는지 확인
-    const idx = payload.indexOf('{');
-    const jdx = payload.lastIndexOf('}');
-    if (idx !== -1 && jdx !== -1 && jdx > idx) {
-      try {
-        const guess = payload.slice(idx, jdx + 1);
-        return JSON.parse(guess);
-      } catch(nestedError) {
-        // JSON 객체 추출도 실패한 경우
-      }
+  } catch (error) {
+    // Try extracting JSON object from text
+    const extracted = tryExtractJsonObject(payload);
+    if (extracted) {
+      return extracted;
     }
     
-    // JSON 파싱이 완전히 실패한 경우, 일반 텍스트로 간주하고 기본 형태로 반환
+    // Fallback: treat as plain text
     console.warn('JSON 파싱 실패, 일반 텍스트로 처리:', payload.substring(0, 100) + '...');
     return {
       messages: [payload]
