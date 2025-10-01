@@ -4,7 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { USER_ROLE } from './database/schemas/users.js';
 
-import messageRepository from './repositories/messageRepository.js';
 import userRepository from './repositories/userRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -22,18 +21,28 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-// Discord client
-import client from './discord/discord.js';
+/**
+ * Initialize bot user in database if not exists
+ */
+function initializeBotUser() {
+  const botUserId = process.env.DISCORD_CLIENT_ID;
+  const existingUser = userRepository.findById(botUserId);
+  
+  if (!existingUser) {
+    userRepository.create({
+      userId: botUserId,
+      username: config.reference.char.username,
+      globalName: config.reference.char.global_name,
+      role: USER_ROLE.BOT
+    });
+    console.log('✅ Bot user initialized in database');
+  }
+}
 
 console.log('🤖 DiscordMate starting...');
 
+// Initialize bot user
+initializeBotUser();
 
-// Check if the user exists in the database, if not, create a new user
-let model = userRepository.findById(process.env.DISCORD_CLIENT_ID);
-if (!model) {
-  const userId = process.env.DISCORD_CLIENT_ID;
-  const username = config.reference.char.username;
-  const globalName = config.reference.char.global_name;
-  const role = USER_ROLE.BOT;
-  userRepository.create({ userId, username, globalName, role });
-}
+// Discord client (must be imported after bot user is initialized)
+import('./discord/discord.js');
