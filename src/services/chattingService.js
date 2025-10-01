@@ -34,6 +34,56 @@ class ChattingService {
     activeGenerations.delete(key);
   }
 
+  /**
+   * Generate AI decision with retry logic for 'wait' responses
+   * @param {Object} params - Decision parameters
+   * @param {string} params.userInput - User input text
+   * @param {string} params.channelId - Channel ID
+   * @param {number} maxRetries - Maximum number of retries (default: 2)
+   * @returns {Promise<Object>} Decision object with functionResults
+   */
+  async generateDecisionWithRetry({ userInput, channelId }, maxRetries = 2) {
+    const RETRY_DELAY_MS = 5000;
+    const functionResults = [];
+
+    let decision = await aiService.generateDecision({
+      provider: 'GEMINI',
+      userInput,
+      channelId
+    });
+
+    console.log('AI Decision (1st attempt):', decision);
+
+    // Retry logic for 'wait' decisions
+    for (let attempt = 1; attempt <= maxRetries && decision.decision === 'wait'; attempt++) {
+      const attemptSuffix = attempt === 1 ? 'nd' : 'rd';
+      console.log(`Waiting ${RETRY_DELAY_MS / 1000} seconds before retry (attempt ${attempt}/${maxRetries})...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      
+      decision = await aiService.generateDecision({
+        provider: 'GEMINI',
+        userInput,
+        channelId
+      });
+
+      console.log(`AI Decision (${attempt + 1}${attemptSuffix} attempt):`, decision);
+    }
+
+    // Collect function call results
+    if (decision.decision === 'functionCall' && decision.functionResult) {
+      functionResults.push(decision.functionResult);
+      console.log('Function executed, proceeding with response generation...');
+    }
+
+    // Final wait handling
+    if (decision.decision === 'wait' && maxRetries >= 2) {
+      console.log('Final wait decision - proceeding anyway after 5 seconds...');
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+
+    return { decision, functionResults };
+  }
+
   async chat(channelId, userId) {
     const key = `${userId}:${channelId}`;
 
@@ -58,49 +108,19 @@ class ChattingService {
     activeGenerations.set(key, { genId: generation.id, abortController });
 
     try {
-      let decision = await aiService.generateDecision({
-        provider: 'GEMINI',
-        userInput: messages.map(message => message.content ?? '').join('\n'),
+      const userInput = messages.map(message => message.content ?? '').join('\n');
+      
+      // Generate decision with retry logic
+      const { decision, functionResults } = await this.generateDecisionWithRetry({
+        userInput,
         channelId
       });
-
-      console.log('AI Decision (1st attempt):', decision);
-
-      // Decision 로직: wait면 최대 2번까지 재시도
-      let decisionAttempts = 1;
-      let functionResults = [];
-
-      while (decision.decision === 'wait' && decisionAttempts < 3) {
-        console.log(`Waiting 5 seconds before retry (attempt ${decisionAttempts}/2)...`);
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        
-        decisionAttempts++;
-        decision = await aiService.generateDecision({
-          provider: 'GEMINI',
-          userInput: messages.map(message => message.content ?? '').join('\n'),
-          channelId
-        });
-
-        console.log(`AI Decision (${decisionAttempts}${decisionAttempts === 2 ? 'nd' : 'rd'} attempt):`, decision);
-      }
-
-      // functionCall 결과 수집
-      if (decision.decision === 'functionCall' && decision.functionResult) {
-        functionResults.push(decision.functionResult);
-        console.log('Function executed, proceeding with response generation...');
-      }
-
-      // 3번째 시도에서도 wait이면 그냥 진행
-      if (decision.decision === 'wait' && decisionAttempts >= 3) {
-        console.log('Final wait decision - proceeding anyway after 5 seconds...');
-        await new Promise(resolve => setTimeout(resolve, 5000));
-      }
 
       // 4) Call AI service
       const response = await aiService.generateResponse({
         provider: 'GEMINI',
         userId,
-        userInput: messages.map(message => message.content ?? '').join('\n'),
+        userInput,
         timestamp: Date.now(),
         channelId,
         functionCallResults: functionResults.length > 0 ? functionResults : null,
