@@ -71,6 +71,65 @@ export class LogService {
   }
 
   /**
+   * Truncate text to fit Discord embed field limits
+   * @param {string} text - Text to truncate
+   * @param {number} maxLength - Maximum length (default: 1024)
+   * @returns {string} Truncated text
+   */
+  truncateText(text, maxLength = 1024) {
+    if (!text || text.length <= maxLength) return text;
+    return text.substring(0, maxLength - 3) + '...';
+  }
+
+  /**
+   * Get log channel, initializing if needed
+   * @returns {Promise<Channel|null>} Log channel or null
+   */
+  async getLogChannel() {
+    if (!this.initialized) {
+      const success = await this.initializeLogChannel();
+      if (!success) return null;
+    }
+
+    const logChannel = await this.client.channels.fetch(this.logChannelId);
+    if (!logChannel) {
+      console.error('로그 채널을 찾을 수 없습니다:', this.logChannelId);
+      return null;
+    }
+
+    return logChannel;
+  }
+
+  /**
+   * Create common base fields for log embeds
+   * @param {Object} data - Data for fields
+   * @param {string} data.userId - User ID
+   * @param {string} data.username - Username
+   * @param {string} data.channelId - Channel ID
+   * @param {string} [data.guildId] - Guild ID (optional)
+   * @returns {Array} Array of embed fields
+   */
+  createBaseFields({ userId, username, channelId, guildId }) {
+    return [
+      {
+        name: '👤 사용자',
+        value: `<@${userId}> (${username})`,
+        inline: true
+      },
+      {
+        name: '📍 채널',
+        value: `<#${channelId}>`,
+        inline: true
+      },
+      {
+        name: '🏠 서버',
+        value: guildId ? `서버 ID: ${guildId}` : 'DM',
+        inline: true
+      }
+    ];
+  }
+
+  /**
    * AI 응답을 임베드로 로그 채널에 기록
    * @param {Object} logData - 로그 데이터
    * @param {string} logData.userId - 사용자 ID
@@ -86,18 +145,9 @@ export class LogService {
    */
   async logAIResponse(logData) {
     try {
-      // 로그 채널 초기화 확인
-      if (!this.initialized) {
-        const success = await this.initializeLogChannel();
-        if (!success) {
-          console.warn('로그 채널이 설정되지 않아 로그를 기록할 수 없습니다.');
-          return;
-        }
-      }
-
-      const logChannel = await this.client.channels.fetch(this.logChannelId);
+      const logChannel = await this.getLogChannel();
       if (!logChannel) {
-        console.error('로그 채널을 찾을 수 없습니다:', this.logChannelId);
+        console.warn('로그 채널이 설정되지 않아 로그를 기록할 수 없습니다.');
         return;
       }
 
@@ -106,21 +156,7 @@ export class LogService {
         .setTitle('🤖 AI 응답 로그')
         .setColor(Colors.Blue)
         .addFields(
-          {
-            name: '👤 사용자',
-            value: `<@${logData.userId}> (${logData.username})`,
-            inline: true
-          },
-          {
-            name: '📍 채널',
-            value: `<#${logData.channelId}>`,
-            inline: true
-          },
-          {
-            name: '🏠 서버',
-            value: logData.guildId ? `서버 ID: ${logData.guildId}` : 'DM',
-            inline: true
-          },
+          ...this.createBaseFields(logData),
           {
             name: '⏱️ 처리 시간',
             value: `${logData.processingTime}ms`,
@@ -128,9 +164,7 @@ export class LogService {
           },
           {
             name: '📥 사용자 입력',
-            value: logData.userInput.length > 1024 
-              ? logData.userInput.substring(0, 1021) + '...'
-              : logData.userInput
+            value: this.truncateText(logData.userInput)
           }
         )
         .setTimestamp();
@@ -140,9 +174,7 @@ export class LogService {
         const aiResponseText = logData.aiMessages.join(' ');
         embed.addFields({
           name: '🤖 AI 응답',
-          value: aiResponseText.length > 1024 
-            ? aiResponseText.substring(0, 1021) + '...'
-            : aiResponseText
+          value: this.truncateText(aiResponseText)
         });
       }
 
@@ -150,9 +182,7 @@ export class LogService {
       if (logData.aiThinking) {
         embed.addFields({
           name: '🧠 AI 추론 과정',
-          value: logData.aiThinking.length > 1024 
-            ? logData.aiThinking.substring(0, 1021) + '...'
-            : logData.aiThinking
+          value: this.truncateText(logData.aiThinking)
         });
       }
 
@@ -236,39 +266,17 @@ export class LogService {
    */
   async logError(errorData) {
     try {
-      // 로그 채널 초기화 확인
-      if (!this.initialized) {
-        const success = await this.initializeLogChannel();
-        if (!success) {
-          return;
-        }
-      }
-
-      const logChannel = await this.client.channels.fetch(this.logChannelId);
+      const logChannel = await this.getLogChannel();
       if (!logChannel) return;
 
       const embed = new EmbedBuilder()
         .setTitle('❌ 에러 로그')
         .setColor(Colors.Red)
         .addFields(
-          {
-            name: '👤 사용자',
-            value: `<@${errorData.userId}> (${errorData.username})`,
-            inline: true
-          },
-          {
-            name: '📍 채널',
-            value: `<#${errorData.channelId}>`,
-            inline: true
-          },
-          {
-            name: '🏠 서버',
-            value: errorData.guildId ? `서버 ID: ${errorData.guildId}` : 'DM',
-            inline: true
-          },
+          ...this.createBaseFields(errorData),
           {
             name: '🔥 에러 내용',
-            value: errorData.error.toString().substring(0, 1024)
+            value: this.truncateText(errorData.error.toString())
           }
         )
         .setTimestamp();
